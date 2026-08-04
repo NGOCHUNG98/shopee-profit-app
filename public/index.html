@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shopee Profit Manager - Web App Quản Lý Bán Hàng Shopee & Tỷ Giá NDT</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <div class="app-container">
+    <!-- HEADER NAVBAR -->
+    <header class="app-header">
+      <div class="logo-group">
+        <div class="shopee-icon">🛍️</div>
+        <div>
+          <h1 class="app-title">Shopee Profit Manager</h1>
+          <p class="app-subtitle">Quản Lý Đơn Hàng • Tỷ Giá NDT Hàng Ngày • Phí QC Ads • Thuế TMĐT 1.5% • Lợi Nhuận Ròng</p>
+        </div>
+      </div>
+
+      <div class="header-controls">
+        <div class="month-selector-wrapper">
+          <label for="monthSelect">📅 Chọn Tháng:</label>
+          <select id="monthSelect" class="form-select font-bold">
+            <option value="2026-08" selected>Tháng 08/2026</option>
+            <option value="2026-09">Tháng 09/2026</option>
+            <option value="2026-10">Tháng 10/2026</option>
+            <option value="2026-11">Tháng 11/2026</option>
+            <option value="2026-12">Tháng 12/2026</option>
+          </select>
+        </div>
+
+        <input type="file" id="shopeeFileInput" accept=".xlsx, .xls" style="display: none;">
+        <button id="btnImportShopeeExcel" class="btn btn-primary">
+          📤 Import Shopee Excel
+        </button>
+
+        <button id="btnSyncShopee" class="btn btn-shopee">
+          <span class="spin-icon">🔄</span> Đồng Bộ Shopee API
+        </button>
+
+        <button id="btnExportExcel" class="btn btn-excel">
+          📥 Xuất Excel (.xlsx)
+        </button>
+      </div>
+    </header>
+
+    <!-- NAVIGATION TABS -->
+    <nav class="nav-tabs">
+      <button class="nav-tab active" data-tab="dashboard">📊 Dashboard Tổng Quan</button>
+      <button class="nav-tab" data-tab="orders">🛒 Quản Lý Đơn Hàng (<span id="tabOrderCount">0</span>)</button>
+      <button class="nav-tab" data-tab="rates">🇨🇳 Tỷ Giá NDT Tự Nhập</button>
+      <button class="nav-tab" data-tab="apiconfig">🔑 Cấu Hình Shopee API</button>
+    </nav>
+
+    <!-- MAIN CONTENT CONTAINERS -->
+    <main class="main-content">
+      
+      <!-- 1. DASHBOARD TAB -->
+      <section id="tab-dashboard" class="tab-panel active">
+        <!-- KPI SUMMARY CARDS -->
+        <div class="kpi-grid">
+          <div class="kpi-card blue">
+            <div class="kpi-header">TỔNG ĐƠN HÀNG THÀNH CÔNG</div>
+            <div class="kpi-value" id="kpiOrdersCount">0 đơn</div>
+            <div class="kpi-subtext" id="kpiItemsSold">0 sản phẩm bán ra</div>
+          </div>
+
+          <div class="kpi-card blue">
+            <div class="kpi-header">DOANH THU THỰC NHẬN</div>
+            <div class="kpi-value" id="kpiRevenue">0 đ</div>
+            <div class="kpi-subtext">Sau khi trừ Voucher, Thuế & Phí Shopee</div>
+          </div>
+
+          <div class="kpi-card orange">
+            <div class="kpi-header">GIÁ VỐN HÀNG BÁN</div>
+            <div class="kpi-value" id="kpiCost">0 đ</div>
+            <div class="kpi-subtext">Tiền NDT quy đổi + VC TQ-VN</div>
+          </div>
+
+          <div class="kpi-card purple">
+            <div class="kpi-header">TỔNG PHÍ & THUẾ SHOPEE</div>
+            <div class="kpi-value" id="kpiFees">0 đ</div>
+            <div class="kpi-subtext">Cố định + Dịch vụ + Thanh toán + Thuế 1.5%</div>
+          </div>
+
+          <div class="kpi-card red">
+            <div class="kpi-header">TỔNG PHÍ QC SHOPEE ADS (THÁNG)</div>
+            <div class="kpi-value-input">
+              <input type="number" id="adsCostInput" class="ads-input" value="0" step="any">
+              <button id="btnSaveAds" class="btn btn-sm btn-primary">Lưu</button>
+            </div>
+            <div class="kpi-subtext">Tự động cộng dồn từ QC các ngày</div>
+          </div>
+
+          <div class="kpi-card green featured">
+            <div class="kpi-header">LỢI NHUẬN RÒNG CUỐI CÙNG (SAU ADS)</div>
+            <div class="kpi-value highlight" id="kpiFinalProfit">0 đ</div>
+            <div class="kpi-subtext">Tỷ suất LN Ròng: <span id="kpiMargin" class="font-bold">0%</span></div>
+          </div>
+        </div>
+
+        <!-- DAILY BREAKDOWN TABLE INCLUDING DAILY SHOPEE ADS -->
+        <div class="card-panel mt-6">
+          <div class="panel-header">
+            <div>
+              <h3>📈 Thống Kê Doanh Thu, Chi Phí QC Ads & Lợi Nhuận Chi Tiết Theo Ngày</h3>
+              <p class="text-muted text-sm mt-1">Phí QC Shopee Ads ngày được tự động lấy từ API (hoặc bạn có thể nhấp chuột vào ô để sửa trực tiếp)</p>
+            </div>
+            <span class="badge badge-info" id="monthTitleBadge">Tháng 08/2026</span>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th class="text-center">Ngày</th>
+                  <th class="text-center">Số Đơn</th>
+                  <th class="text-center">Số SP</th>
+                  <th class="text-right">Tỷ Giá NDT Tự Nhập</th>
+                  <th class="text-right">Doanh Thu (VND)</th>
+                  <th class="text-right">Giá Vốn (VND)</th>
+                  <th class="text-right">Phí & Thuế (VND)</th>
+                  <th class="text-right" style="color: #FCA5A5;">Phí QC Ads Ngày (VND)</th>
+                  <th class="text-right" style="color: #34D399;">Lợi Nhuận Ròng Ngày (VND)</th>
+                  <th class="text-center">Tỷ Suất LN %</th>
+                </tr>
+              </thead>
+              <tbody id="dailyStatsBody">
+                <!-- Populated dynamically via JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. ORDERS TAB -->
+      <section id="tab-orders" class="tab-panel">
+        <div class="orders-action-bar">
+          <div class="filter-pills">
+            <button class="pill active" data-status="all">Tất cả</button>
+            <button class="pill" data-status="Giao thành công">🟢 Giao thành công</button>
+            <button class="pill" data-status="Chờ giao hàng">🔵 Chờ giao hàng</button>
+            <button class="pill" data-status="Đang vận chuyển">🚚 Đang vận chuyển</button>
+            <button class="pill" data-status="Đã hủy">🔴 Đã hủy</button>
+            <button class="pill" data-status="Trả hàng/Hoàn tiền">🟡 Trả hàng/Hoàn tiền</button>
+          </div>
+
+          <div class="search-box">
+            <input type="text" id="orderSearchInput" placeholder="🔍 Tìm Mã đơn, Tên người mua, Tên SP...">
+            <button id="btnOpenAddOrderModal" class="btn btn-success">+ Thêm Đơn Hàng</button>
+          </div>
+        </div>
+
+        <div class="card-panel">
+          <div class="table-responsive">
+            <table class="data-table orders-table">
+              <thead>
+                <tr>
+                  <th class="text-center">STT</th>
+                  <th class="text-center">Mã Đơn Hàng</th>
+                  <th class="text-center">Ngày Bán</th>
+                  <th>Account Người Mua</th>
+                  <th>Tên Sản Phẩm (SKU)</th>
+                  <th class="text-center">SL</th>
+                  <th class="text-center">Trạng Thái</th>
+                  <th class="text-right">Giá Vốn NDT (¥)</th>
+                  <th class="text-right">Tỷ Giá NDT</th>
+                  <th class="text-right">Tổng Giá Vốn (VND)</th>
+                  <th class="text-right">Giá Bán Shopee (VND)</th>
+                  <th class="text-right" style="color: #F87171;">Mã Giảm Giá Shop</th>
+                  <th class="text-right" style="color: #FBBF24;">Thuế (1.5%)</th>
+                  <th class="text-right">Tổng Phí & Thuế (VND)</th>
+                  <th class="text-right">Doanh Thu Thực Nhận</th>
+                  <th class="text-right">Lợi Nhuận Ròng</th>
+                  <th class="text-center">Thao Tác</th>
+                </tr>
+              </thead>
+              <tbody id="ordersTableBody">
+                <!-- Populated dynamically via JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. RATES TAB (TỶ GIÁ NDT DO BẠN TỰ NHẬP HÀNG NGÀY) -->
+      <section id="tab-rates" class="tab-panel">
+        <div class="card-panel">
+          <div class="panel-header">
+            <div>
+              <h3>🇨🇳 Quản Lý Tỷ Giá NDT/VND Do Bạn Tự Nhập Theo Ngày Mua Thực Tế</h3>
+              <p class="text-muted text-sm mt-1">Hệ thống sẽ tự động tra cứu đúng tỷ giá của ngày mua tệ mà bạn điền tại đây để quy đổi tiền vốn sang VND cho từng đơn hàng!</p>
+            </div>
+            <button id="btnOpenAddRateModal" class="btn btn-primary">+ Nhập Tỷ Giá Ngày Mới</button>
+          </div>
+
+          <div class="table-responsive mt-4">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th class="text-center">Ngày Mua Tệ</th>
+                  <th class="text-right">Tỷ Giá Mua NDT Gốc (VND)</th>
+                  <th class="text-center">Phí Chuyển Tiền / Đổi Tệ (%)</th>
+                  <th class="text-right">Tỷ Giá Thực Tế Áp Dụng (VND)</th>
+                  <th>Nguồn Mua Tệ / Ghi Chú</th>
+                  <th class="text-center">Thao Tác</th>
+                </tr>
+              </thead>
+              <tbody id="ratesTableBody">
+                <!-- Populated dynamically via JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. SHOPEE API CONFIG TAB -->
+      <section id="tab-apiconfig" class="tab-panel">
+        <div class="card-panel max-w-2xl">
+          <div class="panel-header">
+            <h3>🔑 Cấu Hình Tích Hợp Shopee Open Platform API V2 (Bao gồm Shopee Ads API)</h3>
+            <span id="apiStatusBadge" class="badge badge-warning">Chưa Kết Nối (Đang Dùng Mock API)</span>
+          </div>
+
+          <form id="apiConfigForm" class="mt-4 form-grid">
+            <div class="form-group">
+              <label for="partnerId">Partner ID (Mã Ứng Dụng):</label>
+              <input type="text" id="partnerId" class="form-input" placeholder="VD: 2008451">
+            </div>
+
+            <div class="form-group">
+              <label for="partnerKey">Partner Key (Khóa Bảo Mật):</label>
+              <input type="password" id="partnerKey" class="form-input" placeholder="VD: 74a98f12c... (Chuỗi bí mật HMAC-SHA256)">
+            </div>
+
+            <div class="form-group">
+              <label for="shopId">Shop ID (Mã Gian Hàng Shopee):</label>
+              <input type="text" id="shopId" class="form-input" placeholder="VD: 98124015">
+            </div>
+
+            <div class="form-info-box">
+              <p>💡 <strong>Hướng dẫn</strong>: Hệ thống hỗ trợ gọi <code>shopee.ads.get_daily_performance</code> để tự động tải Chi phí QC Shopee Ads hàng ngày của gian hàng về bảng thống kê!</p>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">Lưu Cấu Hình API</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- MODAL: ADD / EDIT ORDER -->
+  <div id="orderModal" class="modal-backdrop">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 id="orderModalTitle">Thêm Đơn Hàng Shopee Mới</h3>
+        <button class="btn-close" id="btnCloseOrderModal">&times;</button>
+      </div>
+      <form id="orderForm" class="modal-body form-grid">
+        <div class="form-group">
+          <label for="orderId">Mã Đơn Hàng (Phân biệt):</label>
+          <input type="text" id="orderId" class="form-input" required placeholder="VD: 260801SP999">
+        </div>
+
+        <div class="form-group">
+          <label for="orderDate">Ngày Phát Sinh Đơn:</label>
+          <input type="date" id="orderDate" class="form-input" required>
+        </div>
+
+        <div class="form-group">
+          <label for="orderBuyer">Account Người Mua (Username Shopee):</label>
+          <input type="text" id="orderBuyer" class="form-input" required placeholder="VD: nguyenvana_99">
+        </div>
+
+        <div class="form-group">
+          <label for="orderSku">Tên Sản Phẩm / SKU:</label>
+          <input type="text" id="orderSku" class="form-input" required placeholder="VD: Tai nghe Bluetooth Pro X">
+        </div>
+
+        <div class="form-group">
+          <label for="orderQty">Số Lượng:</label>
+          <input type="number" id="orderQty" class="form-input" min="1" value="1" required>
+        </div>
+
+        <div class="form-group">
+          <label for="orderStatus">Trạng Thái Đơn Hàng:</label>
+          <select id="orderStatus" class="form-select">
+            <option value="Giao thành công">🟢 Giao thành công</option>
+            <option value="Chờ giao hàng">🔵 Chờ giao hàng</option>
+            <option value="Đang vận chuyển">🚚 Đang vận chuyển</option>
+            <option value="Đã hủy">🔴 Đã hủy</option>
+            <option value="Trả hàng/Hoàn tiền">🟡 Trả hàng/Hoàn tiền</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="orderPriceCny">Giá Vốn NDT (¥):</label>
+          <input type="number" id="orderPriceCny" class="form-input" step="any" value="0" required>
+        </div>
+
+        <div class="form-group">
+          <label for="orderRateDate">Ngày Áp Tỷ Giá NDT:</label>
+          <input type="date" id="orderRateDate" class="form-input" required>
+        </div>
+
+        <div class="form-group">
+          <label for="orderWeightKg">Trọng Lượng Hàng (Kg):</label>
+          <input type="number" id="orderWeightKg" class="form-input" step="any" value="1.0" placeholder="VD: 5.0">
+        </div>
+
+        <div class="form-group">
+          <label for="orderPricePerKgVnd">Cước Phí VC (VND / 1kg):</label>
+          <input type="number" id="orderPricePerKgVnd" class="form-input" step="any" value="25000" placeholder="VD: 21600">
+        </div>
+
+        <div class="form-group">
+          <label for="orderShipVnd">➡️ Phí VC TQ-VN (Tự động = Kg x Đơn giá):</label>
+          <input type="number" id="orderShipVnd" class="form-input" step="any" readonly style="background: rgba(255,255,255,0.06); font-weight: bold; color: #34D399;">
+        </div>
+
+        <div class="form-group">
+          <label for="orderSellVnd">Giá Bán Shopee (VND/SP):</label>
+          <input type="number" id="orderSellVnd" class="form-input" step="any" required placeholder="VD: 220000">
+        </div>
+
+        <div class="form-group">
+          <label for="orderShopVoucherVnd">Mã Giảm Giá Của Shop (VND):</label>
+          <input type="number" id="orderShopVoucherVnd" class="form-input" step="any" value="0" placeholder="VD: 50000">
+        </div>
+
+        <div class="form-group full-width">
+          <label for="orderNote">Ghi Chú:</label>
+          <input type="text" id="orderNote" class="form-input" placeholder="Ghi chú thêm...">
+        </div>
+
+        <div class="modal-footer full-width">
+          <button type="button" class="btn btn-secondary" id="btnCancelOrderModal">Hủy</button>
+          <button type="submit" class="btn btn-success">Lưu Đơn Hàng</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: ADD / EDIT RATE -->
+  <div id="rateModal" class="modal-backdrop">
+    <div class="modal-box small">
+      <div class="modal-header">
+        <h3>Nhập Tỷ Giá NDT Theo Ngày</h3>
+        <button class="btn-close" id="btnCloseRateModal">&times;</button>
+      </div>
+      <form id="rateForm" class="modal-body form-grid">
+        <div class="form-group full-width">
+          <label for="rateDateInput">Ngày Mua Tệ:</label>
+          <input type="date" id="rateDateInput" class="form-input" required>
+        </div>
+
+        <div class="form-group full-width">
+          <label for="rateBaseInput">Tỷ Giá NDT Mua Vào Gốc (VND/1 NDT):</label>
+          <input type="number" id="rateBaseInput" class="form-input" step="any" placeholder="VD: 3550" required>
+        </div>
+
+        <div class="form-group full-width">
+          <label for="rateFeeInput">Phí Đổi Tệ / Chuyển Tiền (%):</label>
+          <input type="number" id="rateFeeInput" class="form-input" step="any" value="0">
+        </div>
+
+        <div class="form-group full-width">
+          <label for="rateSourceInput">Nguồn Mua / Ghi Chú:</label>
+          <input type="text" id="rateSourceInput" class="form-input" placeholder="VD: Alipay, Chuyển khoản VCB...">
+        </div>
+
+        <div class="modal-footer full-width">
+          <button type="button" class="btn btn-secondary" id="btnCancelRateModal">Hủy</button>
+          <button type="submit" class="btn btn-primary">Lưu Tỷ Giá</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
