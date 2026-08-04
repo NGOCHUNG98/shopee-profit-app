@@ -37,7 +37,7 @@ body {
 .app-container {
   max-width: 1680px;
   margin: 0 auto;
-  padding: 20px;
+  padding: 16px;
 }
 
 /* HEADER NAVBAR */
@@ -47,35 +47,35 @@ body {
   align-items: center;
   background: var(--panel-bg);
   border: 1px solid var(--panel-border);
-  padding: 18px 24px;
+  padding: 14px 20px;
   border-radius: var(--border-radius);
   box-shadow: var(--shadow-lg);
-  margin-bottom: 20px;
-  gap: 20px;
+  margin-bottom: 18px;
+  gap: 16px;
 }
 
 .logo-group {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   flex-shrink: 0;
 }
 
 .shopee-icon {
-  font-size: 2.2rem;
+  font-size: 1.8rem;
   background: linear-gradient(135deg, var(--shopee-orange), #FF7337);
-  width: 52px;
-  height: 52px;
+  width: 44px;
+  height: 44px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 14px;
-  box-shadow: 0 4px 14px rgba(238, 77, 45, 0.45);
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(238, 77, 45, 0.45);
 }
 
 .app-title {
-  font-size: 1.4rem;
+  font-size: 1.25rem;
   font-weight: 800;
   background: linear-gradient(90deg, #FFFFFF, #CBD5E1);
   -webkit-background-clip: text;
@@ -84,16 +84,16 @@ body {
 }
 
 .app-subtitle {
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   color: var(--text-muted);
-  margin-top: 3px;
+  margin-top: 2px;
 }
 
-/* HEADER CONTROLS: ELEGANT SINGLE-ROW DESKTOP LAYOUT */
+/* HEADER CONTROLS: COMPACT SINGLE-ROW DESKTOP LAYOUT (ALL 4 ON 1 ROW) */
 .header-controls {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   flex-wrap: nowrap;
   flex-shrink: 0;
 }
@@ -101,12 +101,12 @@ body {
 .month-selector-wrapper {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   background: #0F172A;
-  padding: 8px 14px;
-  border-radius: 10px;
+  padding: 5px 10px;
+  border-radius: 8px;
   border: 1px solid var(--panel-border);
-  font-size: 0.88rem;
+  font-size: 0.82rem;
   white-space: nowrap;
 }
 
@@ -114,10 +114,10 @@ body {
   background: #0F172A;
   color: var(--text-main);
   border: 1px solid var(--panel-border);
-  padding: 8px 14px;
-  border-radius: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
   font-family: inherit;
-  font-size: 0.88rem;
+  font-size: 0.82rem;
   outline: none;
   transition: var(--transition);
 }
@@ -127,22 +127,22 @@ body {
   box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.3);
 }
 
-/* PREMIUM MODERN BUTTONS */
+/* COMPACT PREMIUM DESKTOP BUTTONS */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 9px 16px;
-  border-radius: 10px;
+  gap: 5px;
+  padding: 7px 12px;
+  border-radius: 8px;
   font-family: inherit;
-  font-size: 0.88rem;
+  font-size: 0.82rem;
   font-weight: 600;
   cursor: pointer;
   border: none;
   transition: var(--transition);
   white-space: nowrap;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.25);
 }
 
 .btn-primary {
@@ -152,7 +152,7 @@ body {
 .btn-primary:hover {
   background: linear-gradient(135deg, #3B82F6, #2563EB);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
+  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.35);
 }
 
 .btn-shopee {
@@ -162,7 +162,7 @@ body {
 .btn-shopee:hover {
   background: linear-gradient(135deg, #F05D40, #EE4D2D);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(238, 77, 45, 0.35);
+  box-shadow: 0 4px 10px rgba(238, 77, 45, 0.35);
 }
 
 .btn-excel {
@@ -172,7 +172,7 @@ body {
 .btn-excel:hover {
   background: linear-gradient(135deg, #16A34A, #15803D);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(21, 128, 61, 0.35);
+  box-shadow: 0 4px 10px rgba(21, 128, 61, 0.35);
 }
 
 .btn-success {
@@ -182,7 +182,7 @@ body {
 .btn-success:hover {
   background: linear-gradient(135deg, #34D399, #10B981);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35);
+  box-shadow: 0 4px 10px rgba(16, 185, 129, 0.35);
 }
 
 .btn-secondary {
@@ -194,25 +194,25 @@ body {
 }
 
 .btn-sm {
-  padding: 5px 10px;
-  font-size: 0.78rem;
+  padding: 4px 8px;
+  font-size: 0.75rem;
   border-radius: 6px;
 }
 
 /* NAVIGATION TABS */
 .nav-tabs {
   display: flex;
-  gap: 10px;
-  margin-bottom: 20px;
+  gap: 8px;
+  margin-bottom: 18px;
 }
 
 .nav-tab {
-  padding: 11px 20px;
+  padding: 10px 18px;
   background: var(--panel-bg);
   border: 1px solid var(--panel-border);
   color: var(--text-muted);
   font-family: inherit;
-  font-size: 0.92rem;
+  font-size: 0.88rem;
   font-weight: 600;
   border-radius: 10px;
   cursor: pointer;
@@ -555,8 +555,8 @@ body {
   .app-header {
     flex-direction: column;
     align-items: stretch;
-    padding: 16px;
-    gap: 14px;
+    padding: 14px;
+    gap: 12px;
   }
 
   .logo-group {
@@ -568,7 +568,7 @@ body {
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
-    gap: 10px;
+    gap: 8px;
     width: 100%;
   }
 
@@ -578,10 +578,10 @@ body {
   }
 
   .header-controls .btn {
-    flex: 1 1 calc(50% - 10px);
-    min-width: 140px;
+    flex: 1 1 calc(50% - 8px);
+    min-width: 130px;
     justify-content: center;
-    padding: 10px;
+    padding: 8px;
   }
 }
 
