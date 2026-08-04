@@ -157,7 +157,7 @@
           </div>
 
           <div class="search-box">
-            <input type="text" id="orderSearchInput" placeholder="🔍 Tìm Mã đơn, Tên người mua, Tên SP...">
+            <input type="text" id="orderSearchInput" placeholder="🔍 Tìm Mã đơn, Tên người mua, Tên SP, Phân loại...">
             <button id="btnOpenAddOrderModal" class="btn btn-success">+ Thêm Đơn Hàng</button>
           </div>
         </div>
@@ -172,6 +172,7 @@
                   <th class="text-center">Ngày Bán</th>
                   <th>Account Người Mua</th>
                   <th>Tên Sản Phẩm (SKU)</th>
+                  <th>Tên Phân Loại Hàng</th>
                   <th class="text-center">SL</th>
                   <th class="text-center">Trạng Thái</th>
                   <th class="text-right">Giá Vốn NDT (¥)</th>
@@ -289,6 +290,11 @@
         <div class="form-group">
           <label for="orderSku">Tên Sản Phẩm / SKU:</label>
           <input type="text" id="orderSku" class="form-input" required placeholder="VD: Tai nghe Bluetooth Pro X">
+        </div>
+
+        <div class="form-group">
+          <label for="orderVariation">Tên Phân Loại Hàng:</label>
+          <input type="text" id="orderVariation" class="form-input" placeholder="VD: Màu xám - Size L">
         </div>
 
         <div class="form-group">

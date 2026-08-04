@@ -288,7 +288,8 @@ app.get('/api/orders', (req, res) => {
     filtered = filtered.filter(o =>
       (o.id && o.id.toLowerCase().includes(q)) ||
       (o.buyer && o.buyer.toLowerCase().includes(q)) ||
-      (o.sku && o.sku.toLowerCase().includes(q))
+      (o.sku && o.sku.toLowerCase().includes(q)) ||
+      (o.variation && o.variation.toLowerCase().includes(q))
     );
   }
 
@@ -338,7 +339,7 @@ app.delete('/api/orders/:id', (req, res) => {
   res.json({ success: true, message: `Deleted order ${orderId}` });
 });
 
-// 5. IMPORT OFFICIAL SHOPEE EXPORT EXCEL FILE (.xlsx) WITH DEFAULT 24.000 VND/KG FREIGHT RATE
+// 5. IMPORT OFFICIAL SHOPEE EXPORT EXCEL FILE (.xlsx) WITH VARIATION COLUMN
 app.post('/api/import-shopee-excel', async (req, res) => {
   try {
     const { base64Data, clearAll } = req.body;
@@ -370,6 +371,7 @@ app.post('/api/import-shopee-excel', async (req, res) => {
       if (text.includes('ngày đặt') || text.includes('ngày tạo') || text.includes('order date')) headers.date = colNumber;
       if (text.includes('người mua') || text.includes('buyer username') || text.includes('tài khoản')) headers.buyer = colNumber;
       if (text.includes('tên sản phẩm') || text.includes('item name') || text.includes('sku sản phẩm')) headers.sku = colNumber;
+      if (text.includes('tên phân loại') || text.includes('variation')) headers.variation = colNumber;
       if (text.includes('cân nặng') || text.includes('tổng cân nặng') || text.includes('weight')) headers.weight = colNumber;
       if (text.includes('số lượng') && !text.includes('hoàn')) headers.qty = colNumber;
       if (text.includes('trạng thái đơn') || text.includes('status')) headers.status = colNumber;
@@ -388,6 +390,7 @@ app.post('/api/import-shopee-excel', async (req, res) => {
     const dateCol = headers.date || 3;
     const buyerCol = headers.buyer || 53;
     const skuCol = headers.sku || 16;
+    const variationCol = headers.variation || 21;
     const weightCol = headers.weight || 17;
     const qtyCol = headers.qty || 26;
     const statusCol = headers.status || 4;
@@ -409,6 +412,7 @@ app.post('/api/import-shopee-excel', async (req, res) => {
 
       const buyer = String(row.getCell(buyerCol).value || 'shopee_user').trim();
       const sku = String(row.getCell(skuCol).value || 'Sản phẩm Shopee').trim();
+      const variation = String(row.getCell(variationCol).value || '').trim();
       const qty = Number(row.getCell(qtyCol).value) || 1;
       
       const weightValStr = String(row.getCell(weightCol).value || '5.0').trim().replace(',', '.');
@@ -452,7 +456,8 @@ app.post('/api/import-shopee-excel', async (req, res) => {
           serviceFee: headers.serviceFee ? Number(row.getCell(headers.serviceFee).value) || old.serviceFee : old.serviceFee,
           paymentFee: headers.paymentFee ? Number(row.getCell(headers.paymentFee).value) || old.paymentFee : old.paymentFee,
           buyer: buyer || old.buyer,
-          sku: sku || old.sku
+          sku: sku || old.sku,
+          variation: variation || old.variation || ''
         };
         updatedCount++;
       } else {
@@ -461,6 +466,7 @@ app.post('/api/import-shopee-excel', async (req, res) => {
           date: dateStr,
           buyer,
           sku,
+          variation,
           qty,
           status,
           priceCny: 225.0,
@@ -536,6 +542,7 @@ app.post('/api/shopee/sync', (req, res) => {
     date: today,
     buyer: `shopee_user_${randNum}`,
     sku: randItem.name,
+    variation: 'Màu Mặc Định',
     qty: Math.floor(1 + Math.random() * 3),
     status: 'Giao thành công',
     priceCny: randItem.priceCny,
@@ -569,7 +576,7 @@ app.post('/api/shopee/sync', (req, res) => {
   });
 });
 
-// 7. EXPORT EXCEL WORKBOOK (.xlsx) WITH 1.5% TAX COLUMN
+// 7. EXPORT EXCEL WORKBOOK (.xlsx) WITH VARIATION COLUMN
 app.get('/api/export', async (req, res) => {
   try {
     const monthKey = req.query.month || '2026-08';
@@ -589,6 +596,7 @@ app.get('/api/export', async (req, res) => {
       { header: 'Ngày Bán', key: 'date', width: 14 },
       { header: 'Account Người Mua', key: 'buyer', width: 22 },
       { header: 'Tên Sản Phẩm', key: 'sku', width: 30 },
+      { header: 'Tên Phân Loại Hàng', key: 'variation', width: 25 },
       { header: 'Số Lượng', key: 'qty', width: 10 },
       { header: 'Trạng Thái', key: 'status', width: 18 },
       { header: 'Giá NDT (¥)', key: 'priceCny', width: 14 },
@@ -610,6 +618,7 @@ app.get('/api/export', async (req, res) => {
         date: o.date,
         buyer: o.buyer,
         sku: o.sku,
+        variation: o.variation || '',
         qty: o.qty,
         status: o.status,
         priceCny: o.priceCny,

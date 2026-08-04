@@ -315,7 +315,7 @@ document.addEventListener('DOMContentLoaded', () => {
       ordersTableBody.innerHTML = '';
 
       if (orders.length === 0) {
-        ordersTableBody.innerHTML = `<tr><td colspan="17" class="text-center text-muted">Không tìm thấy đơn hàng nào</td></tr>`;
+        ordersTableBody.innerHTML = `<tr><td colspan="18" class="text-center text-muted">Không tìm thấy đơn hàng nào</td></tr>`;
         return;
       }
 
@@ -327,6 +327,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <td class="text-center">${o.date}</td>
           <td class="font-bold">${o.buyer}</td>
           <td>${o.sku}</td>
+          <td style="color: #94A3B8; font-size: 0.82rem;">${o.variation || '-'}</td>
           <td class="text-center font-bold">${o.qty}</td>
           <td class="text-center">${getStatusBadge(o.status)}</td>
           <td class="text-right">${formatCny(o.priceCny)}</td>
@@ -365,6 +366,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('orderDate').value = `${currentMonth}-01`;
     document.getElementById('orderRateDate').value = `${currentMonth}-01`;
     document.getElementById('orderShopVoucherVnd').value = 0;
+    document.getElementById('orderVariation').value = '';
     orderWeightKg.value = 1.0;
     orderPricePerKgVnd.value = 24000;
     updateFreightTotal();
@@ -392,6 +394,7 @@ document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('orderDate').value = order.date;
       document.getElementById('orderBuyer').value = order.buyer;
       document.getElementById('orderSku').value = order.sku;
+      document.getElementById('orderVariation').value = order.variation || '';
       document.getElementById('orderQty').value = order.qty;
       document.getElementById('orderStatus').value = order.status;
       document.getElementById('orderPriceCny').value = order.priceCny;
@@ -419,6 +422,7 @@ document.addEventListener('DOMContentLoaded', () => {
       date: document.getElementById('orderDate').value,
       buyer: document.getElementById('orderBuyer').value.trim(),
       sku: document.getElementById('orderSku').value.trim(),
+      variation: document.getElementById('orderVariation').value.trim(),
       qty: Number(document.getElementById('orderQty').value) || 1,
       status: document.getElementById('orderStatus').value,
       priceCny: Number(document.getElementById('orderPriceCny').value) || 0,
