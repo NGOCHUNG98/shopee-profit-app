@@ -163,7 +163,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const res = await fetch('/api/import-shopee-excel', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ base64Data, clearAll: false }) // Smart Upsert mode
+          body: JSON.stringify({ base64Data, clearAll: false })
         });
         const result = await res.json();
 
@@ -289,15 +289,29 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // --------------------------------------------------
-  // ORDERS LOADING & MANAGEMENT
+  // ORDERS LOADING & MANAGEMENT WITH LIVE STATUS COUNTS
   // --------------------------------------------------
   async function loadOrders() {
     try {
       const url = `/api/orders?month=${currentMonth}&status=${currentStatusFilter}&search=${encodeURIComponent(currentSearchQuery)}`;
       const res = await fetch(url);
-      const orders = await res.json();
+      const resData = await res.json();
 
-      tabOrderCount.textContent = orders.length;
+      const orders = Array.isArray(resData) ? resData : (resData.orders || []);
+      const counts = resData.statusCounts || {};
+
+      // UPDATE STATUS FILTER BADGE COUNTS
+      filterPills.forEach(pill => {
+        const st = pill.dataset.status;
+        if (st === 'all') pill.textContent = `Tất cả (${counts.all || orders.length})`;
+        else if (st === 'Giao thành công') pill.textContent = `🟢 Giao thành công (${counts.completed || 0})`;
+        else if (st === 'Chờ giao hàng') pill.textContent = `🔵 Chờ giao hàng (${counts.pending || 0})`;
+        else if (st === 'Đang vận chuyển') pill.textContent = `🚚 Đang vận chuyển (${counts.shipping || 0})`;
+        else if (st === 'Đã hủy') pill.textContent = `🔴 Đã hủy (${counts.cancelled || 0})`;
+        else if (st === 'Trả hàng/Hoàn tiền') pill.textContent = `🟡 Trả hàng/Hoàn tiền (${counts.refunded || 0})`;
+      });
+
+      tabOrderCount.textContent = counts.all !== undefined ? counts.all : orders.length;
       ordersTableBody.innerHTML = '';
 
       if (orders.length === 0) {
@@ -366,7 +380,8 @@ document.addEventListener('DOMContentLoaded', () => {
   async function openEditOrderModal(id) {
     try {
       const res = await fetch(`/api/orders?month=${currentMonth}&status=all&search=${id}`);
-      const orders = await res.json();
+      const resData = await res.json();
+      const orders = Array.isArray(resData) ? resData : (resData.orders || []);
       const order = orders.find(o => o.id === id);
       if (!order) return;
 

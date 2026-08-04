@@ -81,7 +81,6 @@ function calculateOrderDetails(order, rates) {
     fixedFee = order.fixedFee !== undefined ? Number(order.fixedFee) : Math.round(totalOrderValue * 0.04);
     serviceFee = order.serviceFee !== undefined ? Number(order.serviceFee) : Math.round(totalOrderValue * 0.06);
     paymentFee = order.paymentFee !== undefined ? Number(order.paymentFee) : Math.round(totalOrderValue * 0.04);
-    // 1.5% E-Commerce Tax (Thuế 1.5% Giá Bán Shopee)
     taxFee = Math.round(totalOrderValue * 0.015);
     totalShopeeFees = fixedFee + serviceFee + paymentFee + taxFee;
     netRevenue = totalOrderValue - totalShopeeFees;
@@ -264,11 +263,21 @@ app.get('/api/orders', (req, res) => {
   const { month, status, search } = req.query;
   const data = readData();
 
-  let filtered = data.orders || [];
-
+  let monthOrders = data.orders || [];
   if (month) {
-    filtered = filtered.filter(o => o.date && o.date.startsWith(month));
+    monthOrders = monthOrders.filter(o => o.date && o.date.startsWith(month));
   }
+
+  const statusCounts = {
+    all: monthOrders.length,
+    completed: monthOrders.filter(o => o.status === 'Giao thành công').length,
+    pending: monthOrders.filter(o => o.status === 'Chờ giao hàng').length,
+    shipping: monthOrders.filter(o => o.status === 'Đang vận chuyển').length,
+    cancelled: monthOrders.filter(o => o.status === 'Đã hủy').length,
+    refunded: monthOrders.filter(o => o.status === 'Trả hàng/Hoàn tiền').length
+  };
+
+  let filtered = monthOrders;
 
   if (status && status !== 'all') {
     filtered = filtered.filter(o => o.status === status);
@@ -285,7 +294,7 @@ app.get('/api/orders', (req, res) => {
 
   filtered.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   const calculated = filtered.map(o => calculateOrderDetails(o, data.rates));
-  res.json(calculated);
+  res.json({ orders: calculated, statusCounts });
 });
 
 app.post('/api/orders', (req, res) => {
@@ -329,7 +338,7 @@ app.delete('/api/orders/:id', (req, res) => {
   res.json({ success: true, message: `Deleted order ${orderId}` });
 });
 
-// 5. IMPORT OFFICIAL SHOPEE EXPORT EXCEL FILE (.xlsx) WITH SMART STATUS UPDATES
+// 5. IMPORT OFFICIAL SHOPEE EXPORT EXCEL FILE (.xlsx) WITH UNICODE NFC NORMALIZATION
 app.post('/api/import-shopee-excel', async (req, res) => {
   try {
     const { base64Data, clearAll } = req.body;
@@ -356,7 +365,7 @@ app.post('/api/import-shopee-excel', async (req, res) => {
     let headers = {};
 
     worksheet.getRow(1).eachCell((cell, colNumber) => {
-      const text = String(cell.value || '').trim().toLowerCase();
+      const text = String(cell.value || '').trim().normalize("NFC").toLowerCase();
       if (text.includes('mã đơn') || text.includes('order id')) headers.id = colNumber;
       if (text.includes('ngày đặt') || text.includes('ngày tạo') || text.includes('order date')) headers.date = colNumber;
       if (text.includes('người mua') || text.includes('buyer username') || text.includes('tài khoản')) headers.buyer = colNumber;
@@ -401,11 +410,13 @@ app.post('/api/import-shopee-excel', async (req, res) => {
       const buyer = String(row.getCell(buyerCol).value || 'shopee_user').trim();
       const sku = String(row.getCell(skuCol).value || 'Sản phẩm Shopee').trim();
       const qty = Number(row.getCell(qtyCol).value) || 1;
-      const weightKg = Number(row.getCell(weightCol).value) || 5.0;
+      
+      const weightValStr = String(row.getCell(weightCol).value || '5.0').trim().replace(',', '.');
+      const weightKg = Number(weightValStr) || 5.0;
       const pricePerKgVnd = 21600;
       const shipVnd = Math.round(weightKg * pricePerKgVnd);
 
-      let rawStatus = String(row.getCell(statusCol).value || 'Giao thành công').trim();
+      let rawStatus = String(row.getCell(statusCol).value || 'Giao thành công').trim().normalize("NFC");
       let status = 'Giao thành công';
       if (rawStatus.includes('Hủy') || rawStatus.includes('Cancelled')) status = 'Đã hủy';
       else if (rawStatus.includes('Chờ giao') || rawStatus.includes('Chờ')) status = 'Chờ giao hàng';
@@ -417,13 +428,15 @@ app.post('/api/import-shopee-excel', async (req, res) => {
 
       const existingIdx = data.orders.findIndex(o => o.id === rawId);
       if (existingIdx >= 0) {
-        // SMART UPDATE: Update status, sell price, fees, vouchers while preserving user's custom cost NDT if present!
         const old = data.orders[existingIdx];
         data.orders[existingIdx] = {
           ...old,
+          date: dateStr,
           status,
           sellVnd,
           shopVoucherVnd,
+          weightKg: weightKg || old.weightKg,
+          shipVnd: shipVnd || old.shipVnd,
           fixedFee: headers.fixedFee ? Number(row.getCell(headers.fixedFee).value) || old.fixedFee : old.fixedFee,
           serviceFee: headers.serviceFee ? Number(row.getCell(headers.serviceFee).value) || old.serviceFee : old.serviceFee,
           paymentFee: headers.paymentFee ? Number(row.getCell(headers.paymentFee).value) || old.paymentFee : old.paymentFee,
