@@ -86,10 +86,11 @@ function calculateOrderDetails(order, rates) {
     netRevenue = totalOrderValue - totalShopeeFees;
   }
 
+  // EXACT BUSINESS RULE FOR NET PROFIT BY STATUS
   if (status === 'Đã hủy') {
     netProfit = 0;
   } else if (status === 'Trả hàng/Hoàn tiền') {
-    netProfit = -totalCostVnd;
+    netProfit = -2700; // Flat return/refund handling fee deduction
   } else {
     netProfit = netRevenue - totalCostVnd;
   }
@@ -133,7 +134,7 @@ app.get('/api/dashboard', (req, res) => {
   const totalOrdersCount = calculatedOrders.length;
   const totalItemsSold = calculatedOrders.reduce((sum, o) => sum + (Number(o.qty) || 0), 0);
   const totalRevenue = calculatedOrders.reduce((sum, o) => sum + o.netRevenue, 0);
-  const totalCost = calculatedOrders.reduce((sum, o) => sum + (o.status !== 'Đã hủy' ? o.totalCostVnd : 0), 0);
+  const totalCost = calculatedOrders.reduce((sum, o) => sum + (o.status === 'Giao thành công' || o.status === 'Chờ giao hàng' || o.status === 'Đang vận chuyển' ? o.totalCostVnd : 0), 0);
   const totalShopeeFees = calculatedOrders.reduce((sum, o) => sum + o.totalShopeeFees, 0);
   const orderProfit = calculatedOrders.reduce((sum, o) => sum + o.netProfit, 0);
 
@@ -155,7 +156,7 @@ app.get('/api/dashboard', (req, res) => {
     sumDailyAds += dayAds;
 
     const dayRevenue = dayOrders.reduce((sum, o) => sum + o.totalOrderValue, 0);
-    const dayCost = dayOrders.reduce((sum, o) => sum + o.totalCostVnd, 0);
+    const dayCost = dayOrders.reduce((sum, o) => sum + (o.status === 'Giao thành công' || o.status === 'Chờ giao hàng' || o.status === 'Đang vận chuyển' ? o.totalCostVnd : 0), 0);
     const dayFees = dayOrders.reduce((sum, o) => sum + o.totalShopeeFees, 0);
     const dayOrderProfit = dayOrders.reduce((sum, o) => sum + o.netProfit, 0);
     const dayFinalProfit = dayOrderProfit - dayAds;
