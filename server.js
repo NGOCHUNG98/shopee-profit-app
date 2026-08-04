@@ -47,7 +47,7 @@ function calculateOrderDetails(order, rates) {
   const priceCny = Number(order.priceCny) || 0;
   
   const weightKg = Number(order.weightKg) || 0;
-  const pricePerKgVnd = Number(order.pricePerKgVnd) || 0;
+  const pricePerKgVnd = Number(order.pricePerKgVnd) || 24000;
   let shipVnd = Number(order.shipVnd);
   if (isNaN(shipVnd) || shipVnd === 0) {
     shipVnd = Math.round(weightKg * pricePerKgVnd);
@@ -338,7 +338,7 @@ app.delete('/api/orders/:id', (req, res) => {
   res.json({ success: true, message: `Deleted order ${orderId}` });
 });
 
-// 5. IMPORT OFFICIAL SHOPEE EXPORT EXCEL FILE (.xlsx) WITH PERFECT STATUS PARSING
+// 5. IMPORT OFFICIAL SHOPEE EXPORT EXCEL FILE (.xlsx) WITH DEFAULT 24.000 VND/KG FREIGHT RATE
 app.post('/api/import-shopee-excel', async (req, res) => {
   try {
     const { base64Data, clearAll } = req.body;
@@ -413,7 +413,7 @@ app.post('/api/import-shopee-excel', async (req, res) => {
       
       const weightValStr = String(row.getCell(weightCol).value || '5.0').trim().replace(',', '.');
       const weightKg = Number(weightValStr) || 5.0;
-      const pricePerKgVnd = 21600;
+      const pricePerKgVnd = 24000;
       const shipVnd = Math.round(weightKg * pricePerKgVnd);
 
       let rawStatus = String(row.getCell(statusCol).value || 'Giao thành công').trim().normalize("NFC");
@@ -446,7 +446,8 @@ app.post('/api/import-shopee-excel', async (req, res) => {
           sellVnd,
           shopVoucherVnd,
           weightKg: weightKg || old.weightKg,
-          shipVnd: shipVnd || old.shipVnd,
+          pricePerKgVnd: 24000,
+          shipVnd: Math.round((weightKg || old.weightKg) * 24000),
           fixedFee: headers.fixedFee ? Number(row.getCell(headers.fixedFee).value) || old.fixedFee : old.fixedFee,
           serviceFee: headers.serviceFee ? Number(row.getCell(headers.serviceFee).value) || old.serviceFee : old.serviceFee,
           paymentFee: headers.paymentFee ? Number(row.getCell(headers.paymentFee).value) || old.paymentFee : old.paymentFee,
@@ -465,7 +466,7 @@ app.post('/api/import-shopee-excel', async (req, res) => {
           priceCny: 225.0,
           rateDate: dateStr,
           weightKg,
-          pricePerKgVnd,
+          pricePerKgVnd: 24000,
           shipVnd,
           sellVnd,
           shopVoucherVnd,
@@ -540,8 +541,8 @@ app.post('/api/shopee/sync', (req, res) => {
     priceCny: randItem.priceCny,
     rateDate: today,
     weightKg: 1.0,
-    pricePerKgVnd: 21600,
-    shipVnd: 21600,
+    pricePerKgVnd: 24000,
+    shipVnd: 24000,
     sellVnd: randItem.sell,
     shopVoucherVnd: 10000,
     note: 'Tự động đồng bộ từ Shopee API'

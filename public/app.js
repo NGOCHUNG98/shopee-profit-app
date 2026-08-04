@@ -366,7 +366,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('orderRateDate').value = `${currentMonth}-01`;
     document.getElementById('orderShopVoucherVnd').value = 0;
     orderWeightKg.value = 1.0;
-    orderPricePerKgVnd.value = 21600;
+    orderPricePerKgVnd.value = 24000;
     updateFreightTotal();
     orderModal.classList.add('active');
   });
@@ -398,7 +398,7 @@ document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('orderRateDate').value = order.rateDate || order.date;
       
       orderWeightKg.value = order.weightKg !== undefined ? order.weightKg : 5.0;
-      orderPricePerKgVnd.value = order.pricePerKgVnd !== undefined ? order.pricePerKgVnd : 21600;
+      orderPricePerKgVnd.value = order.pricePerKgVnd !== undefined ? order.pricePerKgVnd : 24000;
       updateFreightTotal();
 
       document.getElementById('orderSellVnd').value = order.sellVnd;
