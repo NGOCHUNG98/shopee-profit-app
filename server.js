@@ -339,7 +339,7 @@ app.delete('/api/orders/:id', (req, res) => {
   res.json({ success: true, message: `Deleted order ${orderId}` });
 });
 
-// 5. IMPORT OFFICIAL SHOPEE EXPORT EXCEL FILE (.xlsx) WITH VARIATION COLUMN
+// 5. IMPORT OFFICIAL SHOPEE EXPORT EXCEL FILE (.xlsx) WITH ADVANCED RETURN/REFUND STATUS MAPPING
 app.post('/api/import-shopee-excel', async (req, res) => {
   try {
     const { base64Data, clearAll } = req.body;
@@ -375,6 +375,7 @@ app.post('/api/import-shopee-excel', async (req, res) => {
       if (text.includes('cân nặng') || text.includes('tổng cân nặng') || text.includes('weight')) headers.weight = colNumber;
       if (text.includes('số lượng') && !text.includes('hoàn')) headers.qty = colNumber;
       if (text.includes('trạng thái đơn') || text.includes('status')) headers.status = colNumber;
+      if (text.includes('trạng thái trả hàng') || text.includes('trạng thái hoàn tiền') || text.includes('return status')) headers.refundStatus = colNumber;
       if (text.includes('giá ưu đãi') || text.includes('tổng số tiền người mua thanh toán') || text.includes('tổng giá trị đơn')) {
         if (!headers.sell) headers.sell = colNumber;
       }
@@ -394,6 +395,7 @@ app.post('/api/import-shopee-excel', async (req, res) => {
     const weightCol = headers.weight || 17;
     const qtyCol = headers.qty || 26;
     const statusCol = headers.status || 4;
+    const refundStatusCol = headers.refundStatus || 15;
     const sellCol = headers.sell || 28;
 
     worksheet.eachRow((row, rowNumber) => {
@@ -421,19 +423,26 @@ app.post('/api/import-shopee-excel', async (req, res) => {
       const shipVnd = Math.round(weightKg * pricePerKgVnd);
 
       let rawStatus = String(row.getCell(statusCol).value || 'Giao thành công').trim().normalize("NFC");
-      let lower = rawStatus.toLowerCase();
+      let rawRefund = String(row.getCell(refundStatusCol).value || '').trim().normalize("NFC");
+
+      let lowerStatus = rawStatus.toLowerCase();
+      let lowerRefund = rawRefund.toLowerCase();
       let status = 'Giao thành công';
 
-      // PRECISE STATUS MAPPING ORDER: Check Completed / Delivered FIRST
-      if (lower.includes('đã nhận được hàng') || lower.includes('hoàn thành') || lower.includes('đã giao') || lower.includes('completed')) {
+      // 1. CHECK RETURN/REFUND STATUS COLUMN FIRST (Col 15)
+      if (lowerRefund.includes('chấp thuận') || lowerRefund.includes('thành công') || lowerRefund.includes('chấp nhận') || lowerRefund.includes('đồng ý') || lowerRefund.includes('approved')) {
+        status = 'Trả hàng/Hoàn tiền';
+      } 
+      // 2. CHECK MAIN ORDER STATUS (Col 4)
+      else if (lowerStatus.includes('đã nhận được hàng') || lowerStatus.includes('hoàn thành') || lowerStatus.includes('đã giao') || lowerStatus.includes('completed')) {
         status = 'Giao thành công';
-      } else if (lower.includes('hủy') || lower.includes('cancelled')) {
+      } else if (lowerStatus.includes('hủy') || lowerStatus.includes('cancelled')) {
         status = 'Đã hủy';
-      } else if (lower.includes('chờ giao') || lower.includes('chờ lấy') || lower.includes('to ship')) {
+      } else if (lowerStatus.includes('chờ giao') || lowerStatus.includes('chờ lấy') || lowerStatus.includes('to ship')) {
         status = 'Chờ giao hàng';
-      } else if (lower.includes('đang giao') || lower.includes('vận chuyển') || lower.includes('shipping')) {
+      } else if (lowerStatus.includes('đang giao') || lowerStatus.includes('vận chuyển') || lowerStatus.includes('shipping')) {
         status = 'Đang vận chuyển';
-      } else if (lower.includes('trả hàng') || lower.includes('hoàn tiền') || lower.includes('return')) {
+      } else if (lowerStatus.includes('trả hàng') || lowerStatus.includes('hoàn tiền') || lowerStatus.includes('return')) {
         status = 'Trả hàng/Hoàn tiền';
       }
 
