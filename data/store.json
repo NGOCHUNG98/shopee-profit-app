@@ -5,6 +5,25 @@
   "rates": [],
   "orders": [
     {
+      "id": "260802B68TXWT1",
+      "date": "2026-08-02",
+      "buyer": "lovestorry",
+      "sku": "Ghế tắm cho người già, người bệnh YC5213X chất liệu hợp kim nhôm đế chống trơn trượt",
+      "qty": 1,
+      "status": "Chờ giao hàng",
+      "priceCny": 225,
+      "rateDate": "2026-08-02",
+      "weightKg": 5,
+      "pricePerKgVnd": 21600,
+      "shipVnd": 108000,
+      "sellVnd": 2071147,
+      "shopVoucherVnd": 50000,
+      "fixedFee": 313278,
+      "serviceFee": 3000,
+      "paymentFee": 121269,
+      "note": "Import từ File Shopee Excel"
+    },
+    {
       "id": "26073163R51NV9",
       "date": "2026-07-31",
       "buyer": "lien89_tta",
