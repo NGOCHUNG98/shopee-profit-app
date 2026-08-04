@@ -338,7 +338,7 @@ app.delete('/api/orders/:id', (req, res) => {
   res.json({ success: true, message: `Deleted order ${orderId}` });
 });
 
-// 5. IMPORT OFFICIAL SHOPEE EXPORT EXCEL FILE (.xlsx) WITH UNICODE NFC NORMALIZATION
+// 5. IMPORT OFFICIAL SHOPEE EXPORT EXCEL FILE (.xlsx) WITH PERFECT STATUS PARSING
 app.post('/api/import-shopee-excel', async (req, res) => {
   try {
     const { base64Data, clearAll } = req.body;
@@ -417,11 +417,21 @@ app.post('/api/import-shopee-excel', async (req, res) => {
       const shipVnd = Math.round(weightKg * pricePerKgVnd);
 
       let rawStatus = String(row.getCell(statusCol).value || 'Giao thành công').trim().normalize("NFC");
+      let lower = rawStatus.toLowerCase();
       let status = 'Giao thành công';
-      if (rawStatus.includes('Hủy') || rawStatus.includes('Cancelled')) status = 'Đã hủy';
-      else if (rawStatus.includes('Chờ giao') || rawStatus.includes('Chờ')) status = 'Chờ giao hàng';
-      else if (rawStatus.includes('Đang giao') || rawStatus.includes('Vận chuyển') || rawStatus.includes('Shipping')) status = 'Đang vận chuyển';
-      else if (rawStatus.includes('Trả') || rawStatus.includes('Hoàn') || rawStatus.includes('Return')) status = 'Trả hàng/Hoàn tiền';
+
+      // PRECISE STATUS MAPPING ORDER: Check Completed / Delivered FIRST
+      if (lower.includes('đã nhận được hàng') || lower.includes('hoàn thành') || lower.includes('đã giao') || lower.includes('completed')) {
+        status = 'Giao thành công';
+      } else if (lower.includes('hủy') || lower.includes('cancelled')) {
+        status = 'Đã hủy';
+      } else if (lower.includes('chờ giao') || lower.includes('chờ lấy') || lower.includes('to ship')) {
+        status = 'Chờ giao hàng';
+      } else if (lower.includes('đang giao') || lower.includes('vận chuyển') || lower.includes('shipping')) {
+        status = 'Đang vận chuyển';
+      } else if (lower.includes('trả hàng') || lower.includes('hoàn tiền') || lower.includes('return')) {
+        status = 'Trả hàng/Hoàn tiền';
+      }
 
       const sellVnd = Number(row.getCell(sellCol).value) || 0;
       const shopVoucherVnd = headers.shopVoucher ? Number(row.getCell(headers.shopVoucher).value) || 0 : 0;
@@ -475,7 +485,7 @@ app.post('/api/import-shopee-excel', async (req, res) => {
       newCount,
       updatedCount,
       message: updatedCount > 0
-        ? `Đã cập nhật trạng thái cho ${updatedCount} đơn hàng cũ và thêm mới ${newCount} đơn hàng!`
+        ? `Đã nạp & cập nhật thành công ${updatedCount + newCount} đơn hàng từ File Excel!`
         : `Đã nạp mới thành công ${newCount} đơn hàng từ File Excel!`
     });
   } catch (err) {
