@@ -128,6 +128,35 @@ async function initDb() {
       );
     `);
     console.log('✅ PostgreSQL Schema initialized successfully!');
+
+    // AUTO SEED POSTGRESQL IF IT IS EMPTY
+    try {
+      const countRes = await pgPool.query('SELECT COUNT(*) FROM orders');
+      const orderCount = parseInt(countRes.rows[0].count, 10);
+      if (orderCount === 0) {
+        console.log('📦 PostgreSQL DB is empty. Auto-seeding data from local JSON database...');
+        loadDbLocal();
+        for (const o of inMemoryDb.orders) {
+          await upsertOrder(o);
+        }
+        for (const r of inMemoryDb.rates) {
+          await upsertRate(r);
+        }
+        for (const [d, cost] of Object.entries(inMemoryDb.daily_ads)) {
+          await upsertDailyAds(d, cost);
+        }
+        for (const [m, cost] of Object.entries(inMemoryDb.ads_costs)) {
+          await upsertAdsCost(m, cost);
+        }
+        if (inMemoryDb.api_config && inMemoryDb.api_config.partnerId) {
+          await upsertApiConfig(inMemoryDb.api_config);
+        }
+        console.log('✅ PostgreSQL Auto-Seeding completed!');
+      }
+    } catch (seedErr) {
+      console.error('PostgreSQL seeding error:', seedErr);
+    }
+
   } else {
     loadDbLocal();
   }
