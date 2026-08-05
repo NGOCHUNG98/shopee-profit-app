@@ -1,8 +1,8 @@
 const express = require('express');
 const cors = require('cors');
-const fs = require('fs');
 const path = require('path');
 const ExcelJS = require('exceljs');
+const dbModule = require('./db.js');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -11,45 +11,6 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
-
-const DATA_DIR = path.join(__dirname, 'data');
-const DATA_FILE = path.join(DATA_DIR, 'store.json');
-
-function readData() {
-  try {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
-    if (!fs.existsSync(DATA_FILE)) {
-      const defaultData = { apiConfig: {}, adsCosts: {}, dailyAds: {}, rates: [], orders: [] };
-      fs.writeFileSync(DATA_FILE, JSON.stringify(defaultData, null, 2), 'utf8');
-      return defaultData;
-    }
-    const raw = fs.readFileSync(DATA_FILE, 'utf8');
-    const parsed = JSON.parse(raw);
-    return {
-      apiConfig: parsed.apiConfig || {},
-      adsCosts: parsed.adsCosts || {},
-      dailyAds: parsed.dailyAds || {},
-      rates: parsed.rates || [],
-      orders: parsed.orders || []
-    };
-  } catch (err) {
-    console.error('Error reading data file:', err);
-    return { apiConfig: {}, adsCosts: {}, dailyAds: {}, rates: [], orders: [] };
-  }
-}
-
-function writeData(data) {
-  try {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
-    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf8');
-  } catch (err) {
-    console.error('Error writing data file:', err);
-  }
-}
 
 function calculateOrderDetails(order, rates) {
   const qty = Number(order.qty) || 1;
@@ -87,9 +48,9 @@ function calculateOrderDetails(order, rates) {
   let netProfit = 0;
 
   if (status !== 'Đã hủy') {
-    fixedFee = order.fixedFee !== undefined ? Number(order.fixedFee) : Math.round(totalOrderValue * 0.04);
-    serviceFee = order.serviceFee !== undefined ? Number(order.serviceFee) : Math.round(totalOrderValue * 0.06);
-    paymentFee = order.paymentFee !== undefined ? Number(order.paymentFee) : Math.round(totalOrderValue * 0.04);
+    fixedFee = order.fixedFee !== undefined && order.fixedFee !== null ? Number(order.fixedFee) : Math.round(totalOrderValue * 0.04);
+    serviceFee = order.serviceFee !== undefined && order.serviceFee !== null ? Number(order.serviceFee) : Math.round(totalOrderValue * 0.06);
+    paymentFee = order.paymentFee !== undefined && order.paymentFee !== null ? Number(order.paymentFee) : Math.round(totalOrderValue * 0.04);
     taxFee = Math.round(totalOrderValue * 0.015);
     totalShopeeFees = fixedFee + serviceFee + paymentFee + taxFee;
     netRevenue = totalOrderValue - totalShopeeFees;
@@ -128,128 +89,139 @@ function calculateOrderDetails(order, rates) {
 }
 
 // ----------------------------------------------------
-// REST API ENDPOINTS
+// REST API ENDPOINTS (SQLITE DATABASE POWERED)
 // ----------------------------------------------------
 
 // 1. GET Dashboard Metrics
-app.get('/api/dashboard', (req, res) => {
-  const monthKey = req.query.month || '2026-08';
-  const data = readData();
+app.get('/api/dashboard', async (req, res) => {
+  try {
+    const monthKey = req.query.month || '2026-08';
+    const allOrders = await dbModule.getAllOrders();
+    const rates = await dbModule.getAllRates();
+    const dailyAdsMap = await dbModule.getAllDailyAds();
+    const adsCostsMap = await dbModule.getAllAdsCosts();
 
-  const monthOrders = data.orders.filter(o => o.date && o.date.startsWith(monthKey));
-  const calculatedOrders = monthOrders.map(o => calculateOrderDetails(o, data.rates));
+    const monthOrders = allOrders.filter(o => o.date && o.date.startsWith(monthKey));
+    const calculatedOrders = monthOrders.map(o => calculateOrderDetails(o, rates));
 
-  const completedOrders = calculatedOrders.filter(o => o.status === 'Giao thành công');
-  const totalOrdersCount = calculatedOrders.length;
-  const totalItemsSold = calculatedOrders.reduce((sum, o) => sum + (Number(o.qty) || 0), 0);
-  const totalRevenue = calculatedOrders.reduce((sum, o) => sum + o.netRevenue, 0);
-  const totalCost = calculatedOrders.reduce((sum, o) => sum + (o.status === 'Giao thành công' || o.status === 'Chờ giao hàng' || o.status === 'Đang vận chuyển' ? o.totalCostVnd : 0), 0);
-  const totalShopeeFees = calculatedOrders.reduce((sum, o) => sum + o.totalShopeeFees, 0);
-  const orderProfit = calculatedOrders.reduce((sum, o) => sum + o.netProfit, 0);
+    const completedOrders = calculatedOrders.filter(o => o.status === 'Giao thành công');
+    const totalOrdersCount = calculatedOrders.length;
+    const totalItemsSold = calculatedOrders.reduce((sum, o) => sum + (Number(o.qty) || 0), 0);
+    const totalRevenue = calculatedOrders.reduce((sum, o) => sum + o.netRevenue, 0);
+    const totalCost = calculatedOrders.reduce((sum, o) => sum + (o.status === 'Giao thành công' || o.status === 'Chờ giao hàng' || o.status === 'Đang vận chuyển' ? o.totalCostVnd : 0), 0);
+    const totalShopeeFees = calculatedOrders.reduce((sum, o) => sum + o.totalShopeeFees, 0);
+    const orderProfit = calculatedOrders.reduce((sum, o) => sum + o.netProfit, 0);
 
-  const [yearStr, mStr] = monthKey.split('-');
-  const year = Number(yearStr) || 2026;
-  const month = Number(mStr) || 8;
-  const daysInMonth = new Date(year, month, 0).getDate();
+    const [yearStr, mStr] = monthKey.split('-');
+    const year = Number(yearStr) || 2026;
+    const month = Number(mStr) || 8;
+    const daysInMonth = new Date(year, month, 0).getDate();
 
-  let sumDailyAds = 0;
-  const dailyStats = [];
-  for (let day = 1; day <= daysInMonth; day++) {
-    const dayStr = `${monthKey}-${day.toString().padStart(2, '0')}`;
-    const dayOrders = calculatedOrders.filter(o => o.date === dayStr);
+    let sumDailyAds = 0;
+    const dailyStats = [];
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dayStr = `${monthKey}-${day.toString().padStart(2, '0')}`;
+      const dayOrders = calculatedOrders.filter(o => o.date === dayStr);
 
-    const dayRateObj = data.rates.find(r => r.date === dayStr);
-    const dayRate = dayRateObj ? Math.round(dayRateObj.baseRate * (1 + (dayRateObj.feePercent || 0) / 100)) : 0;
+      const dayRateObj = rates.find(r => r.date === dayStr);
+      const dayRate = dayRateObj ? Math.round(dayRateObj.baseRate * (1 + (dayRateObj.feePercent || 0) / 100)) : 0;
 
-    const dayAds = Number(data.dailyAds[dayStr]) || 0;
-    sumDailyAds += dayAds;
+      const dayAds = Number(dailyAdsMap[dayStr]) || 0;
+      sumDailyAds += dayAds;
 
-    const dayRevenue = dayOrders.reduce((sum, o) => sum + o.totalOrderValue, 0);
-    const dayCost = dayOrders.reduce((sum, o) => sum + (o.status === 'Giao thành công' || o.status === 'Chờ giao hàng' || o.status === 'Đang vận chuyển' ? o.totalCostVnd : 0), 0);
-    const dayFees = dayOrders.reduce((sum, o) => sum + o.totalShopeeFees, 0);
-    const dayOrderProfit = dayOrders.reduce((sum, o) => sum + o.netProfit, 0);
-    const dayFinalProfit = dayOrderProfit - dayAds;
-    const dayCount = dayOrders.length;
-    const dayQty = dayOrders.reduce((sum, o) => sum + (Number(o.qty) || 0), 0);
+      const dayRevenue = dayOrders.reduce((sum, o) => sum + o.totalOrderValue, 0);
+      const dayCost = dayOrders.reduce((sum, o) => sum + (o.status === 'Giao thành công' || o.status === 'Chờ giao hàng' || o.status === 'Đang vận chuyển' ? o.totalCostVnd : 0), 0);
+      const dayFees = dayOrders.reduce((sum, o) => sum + o.totalShopeeFees, 0);
+      const dayOrderProfit = dayOrders.reduce((sum, o) => sum + o.netProfit, 0);
+      const dayFinalProfit = dayOrderProfit - dayAds;
+      const dayCount = dayOrders.length;
+      const dayQty = dayOrders.reduce((sum, o) => sum + (Number(o.qty) || 0), 0);
 
-    dailyStats.push({
-      date: dayStr,
-      dayDisplay: `${day.toString().padStart(2, '0')}/${mStr}/${year}`,
-      count: dayCount,
-      qty: dayQty,
-      rate: dayRate,
-      revenue: dayRevenue,
-      cost: dayCost,
-      fees: dayFees,
-      orderProfit: dayOrderProfit,
-      adsCost: dayAds,
-      finalProfit: dayFinalProfit,
-      margin: dayRevenue > 0 ? Number(((dayFinalProfit / dayRevenue) * 100).toFixed(1)) : 0
+      dailyStats.push({
+        date: dayStr,
+        dayDisplay: `${day.toString().padStart(2, '0')}/${mStr}/${year}`,
+        count: dayCount,
+        qty: dayQty,
+        rate: dayRate,
+        revenue: dayRevenue,
+        cost: dayCost,
+        fees: dayFees,
+        orderProfit: dayOrderProfit,
+        adsCost: dayAds,
+        finalProfit: dayFinalProfit,
+        margin: dayRevenue > 0 ? Number(((dayFinalProfit / dayRevenue) * 100).toFixed(1)) : 0
+      });
+    }
+
+    const adsCost = sumDailyAds > 0 ? sumDailyAds : (Number(adsCostsMap[monthKey]) || 0);
+    const finalNetProfit = orderProfit - adsCost;
+    const profitMargin = totalRevenue > 0 ? (finalNetProfit / totalRevenue) * 100 : 0;
+
+    res.json({
+      monthKey,
+      totalOrdersCount,
+      completedCount: completedOrders.length,
+      totalItemsSold,
+      totalRevenue,
+      totalCost,
+      totalShopeeFees,
+      orderProfit,
+      adsCost,
+      finalNetProfit,
+      profitMargin: Number(profitMargin.toFixed(1)),
+      dailyStats
     });
+  } catch (err) {
+    console.error('Dashboard Error:', err);
+    res.status(500).json({ error: 'Server error loading dashboard' });
   }
-
-  const adsCost = sumDailyAds > 0 ? sumDailyAds : (Number(data.adsCosts[monthKey]) || 0);
-  const finalNetProfit = orderProfit - adsCost;
-  const profitMargin = totalRevenue > 0 ? (finalNetProfit / totalRevenue) * 100 : 0;
-
-  res.json({
-    monthKey,
-    totalOrdersCount,
-    completedCount: completedOrders.length,
-    totalItemsSold,
-    totalRevenue,
-    totalCost,
-    totalShopeeFees,
-    orderProfit,
-    adsCost,
-    finalNetProfit,
-    profitMargin: Number(profitMargin.toFixed(1)),
-    dailyStats
-  });
 });
 
 // 2. Ads Cost Endpoints
-app.post('/api/ads-cost', (req, res) => {
+app.post('/api/ads-cost', async (req, res) => {
   const { monthKey, adsCost } = req.body;
   if (!monthKey) return res.status(400).json({ error: 'Missing monthKey' });
 
-  const data = readData();
-  data.adsCosts[monthKey] = Number(adsCost) || 0;
-  writeData(data);
-  res.json({ success: true, monthKey, adsCost: data.adsCosts[monthKey] });
+  try {
+    await dbModule.upsertAdsCost(monthKey, adsCost);
+    res.json({ success: true, monthKey, adsCost: Number(adsCost) || 0 });
+  } catch (err) {
+    res.status(500).json({ error: 'Database error saving ads cost' });
+  }
 });
 
-app.post('/api/daily-ads', (req, res) => {
+app.post('/api/daily-ads', async (req, res) => {
   const { date, adsCost } = req.body;
   if (!date) return res.status(400).json({ error: 'Missing date' });
 
-  const data = readData();
-  data.dailyAds[date] = Number(adsCost) || 0;
-  writeData(data);
-  res.json({ success: true, date, adsCost: data.dailyAds[date] });
+  try {
+    await dbModule.upsertDailyAds(date, adsCost);
+    res.json({ success: true, date, adsCost: Number(adsCost) || 0 });
+  } catch (err) {
+    res.status(500).json({ error: 'Database error saving daily ads' });
+  }
 });
 
 // 3. Daily Rates Endpoints
-app.get('/api/rates', (req, res) => {
-  const monthKey = req.query.month;
-  const data = readData();
+app.get('/api/rates', async (req, res) => {
+  try {
+    const monthKey = req.query.month;
+    let ratesList = await dbModule.getAllRates();
 
-  let ratesList = data.rates || [];
-  if (monthKey) {
-    ratesList = ratesList.filter(r => r.date.startsWith(monthKey));
+    if (monthKey) {
+      ratesList = ratesList.filter(r => r.date.startsWith(monthKey));
+    }
+    res.json(ratesList);
+  } catch (err) {
+    res.status(500).json({ error: 'Database error fetching rates' });
   }
-  ratesList.sort((a, b) => a.date.localeCompare(b.date));
-  res.json(ratesList);
 });
 
-app.post('/api/rates', (req, res) => {
+app.post('/api/rates', async (req, res) => {
   const { date, baseRate, feePercent, source } = req.body;
   if (!date || baseRate === undefined) {
     return res.status(400).json({ error: 'Missing required date or baseRate' });
   }
-
-  const data = readData();
-  let existingIndex = data.rates.findIndex(r => r.date === date);
 
   const newRate = {
     date,
@@ -258,98 +230,94 @@ app.post('/api/rates', (req, res) => {
     source: source || 'Tự nhập'
   };
 
-  if (existingIndex >= 0) {
-    data.rates[existingIndex] = newRate;
-  } else {
-    data.rates.push(newRate);
+  try {
+    await dbModule.upsertRate(newRate);
+    res.json({ success: true, rate: newRate });
+  } catch (err) {
+    res.status(500).json({ error: 'Database error saving rate' });
   }
-
-  writeData(data);
-  res.json({ success: true, rate: newRate });
 });
 
 // 4. Orders CRUD
-app.get('/api/orders', (req, res) => {
-  const { month, status, search } = req.query;
-  const data = readData();
+app.get('/api/orders', async (req, res) => {
+  try {
+    const { month, status, search } = req.query;
+    let allOrders = await dbModule.getAllOrders();
+    const rates = await dbModule.getAllRates();
 
-  let monthOrders = data.orders || [];
-  if (month) {
-    monthOrders = monthOrders.filter(o => o.date && o.date.startsWith(month));
+    if (month) {
+      allOrders = allOrders.filter(o => o.date && o.date.startsWith(month));
+    }
+
+    const statusCounts = {
+      all: allOrders.length,
+      completed: allOrders.filter(o => o.status === 'Giao thành công').length,
+      pending: allOrders.filter(o => o.status === 'Chờ giao hàng').length,
+      shipping: allOrders.filter(o => o.status === 'Đang vận chuyển').length,
+      cancelled: allOrders.filter(o => o.status === 'Đã hủy').length,
+      refunded: allOrders.filter(o => o.status === 'Trả hàng/Hoàn tiền').length
+    };
+
+    let filtered = allOrders;
+
+    if (status && status !== 'all') {
+      filtered = filtered.filter(o => o.status === status);
+    }
+
+    if (search) {
+      const q = search.toLowerCase();
+      filtered = filtered.filter(o =>
+        (o.id && o.id.toLowerCase().includes(q)) ||
+        (o.buyer && o.buyer.toLowerCase().includes(q)) ||
+        (o.sku && o.sku.toLowerCase().includes(q)) ||
+        (o.variation && o.variation.toLowerCase().includes(q))
+      );
+    }
+
+    const calculated = filtered.map(o => calculateOrderDetails(o, rates));
+    res.json({ orders: calculated, statusCounts });
+  } catch (err) {
+    res.status(500).json({ error: 'Database error fetching orders' });
   }
-
-  const statusCounts = {
-    all: monthOrders.length,
-    completed: monthOrders.filter(o => o.status === 'Giao thành công').length,
-    pending: monthOrders.filter(o => o.status === 'Chờ giao hàng').length,
-    shipping: monthOrders.filter(o => o.status === 'Đang vận chuyển').length,
-    cancelled: monthOrders.filter(o => o.status === 'Đã hủy').length,
-    refunded: monthOrders.filter(o => o.status === 'Trả hàng/Hoàn tiền').length
-  };
-
-  let filtered = monthOrders;
-
-  if (status && status !== 'all') {
-    filtered = filtered.filter(o => o.status === status);
-  }
-
-  if (search) {
-    const q = search.toLowerCase();
-    filtered = filtered.filter(o =>
-      (o.id && o.id.toLowerCase().includes(q)) ||
-      (o.buyer && o.buyer.toLowerCase().includes(q)) ||
-      (o.sku && o.sku.toLowerCase().includes(q)) ||
-      (o.variation && o.variation.toLowerCase().includes(q))
-    );
-  }
-
-  filtered.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-  const calculated = filtered.map(o => calculateOrderDetails(o, data.rates));
-  res.json({ orders: calculated, statusCounts });
 });
 
-app.post('/api/orders', (req, res) => {
+app.post('/api/orders', async (req, res) => {
   const order = req.body;
   if (!order.id || !order.date || !order.sku) {
     return res.status(400).json({ error: 'Missing required order fields (id, date, sku)' });
   }
 
-  const data = readData();
-  const existingIdx = data.orders.findIndex(o => o.id === order.id);
-
-  if (existingIdx >= 0) {
-    data.orders[existingIdx] = { ...data.orders[existingIdx], ...order };
-  } else {
-    data.orders.push(order);
+  try {
+    await dbModule.upsertOrder(order);
+    res.json({ success: true, order });
+  } catch (err) {
+    res.status(500).json({ error: 'Database error saving order' });
   }
-
-  writeData(data);
-  res.json({ success: true, order });
 });
 
-app.put('/api/orders/:id', (req, res) => {
+app.put('/api/orders/:id', async (req, res) => {
   const orderId = req.params.id;
-  const data = readData();
-  const index = data.orders.findIndex(o => o.id === orderId);
+  const orderData = { ...req.body, id: orderId };
 
-  if (index === -1) {
-    return res.status(404).json({ error: 'Order not found' });
+  try {
+    await dbModule.upsertOrder(orderData);
+    res.json({ success: true, order: orderData });
+  } catch (err) {
+    res.status(500).json({ error: 'Database error updating order' });
   }
-
-  data.orders[index] = { ...data.orders[index], ...req.body };
-  writeData(data);
-  res.json({ success: true, order: data.orders[index] });
 });
 
-app.delete('/api/orders/:id', (req, res) => {
+app.delete('/api/orders/:id', async (req, res) => {
   const orderId = req.params.id;
-  const data = readData();
-  data.orders = data.orders.filter(o => o.id !== orderId);
-  writeData(data);
-  res.json({ success: true, message: `Deleted order ${orderId}` });
+  try {
+    await dbModule.deleteOrder(orderId);
+    res.json({ success: true, message: `Deleted order ${orderId}` });
+  } catch (err) {
+    res.status(500).json({ error: 'Database error deleting order' });
+  }
 });
 
-// 5. IMPORT OFFICIAL SHOPEE EXPORT EXCEL FILE (.xlsx) WITH ADVANCED RETURN/REFUND STATUS MAPPING
+// 5. IMPORT OFFICIAL SHOPEE EXPORT EXCEL FILE (.xlsx) INTO SQLITE DATABASE
 app.post('/api/import-shopee-excel', async (req, res) => {
   try {
     const { base64Data, clearAll } = req.body;
@@ -366,10 +334,12 @@ app.post('/api/import-shopee-excel', async (req, res) => {
       return res.status(400).json({ error: 'Không tìm thấy sheet dữ liệu trong file Excel' });
     }
 
-    const data = readData();
     if (clearAll) {
-      data.orders = [];
+      await dbModule.clearAllOrders();
     }
+
+    const existingOrders = await dbModule.getAllOrders();
+    const existingMap = new Map(existingOrders.map(o => [o.id, o]));
 
     let newCount = 0;
     let updatedCount = 0;
@@ -408,6 +378,8 @@ app.post('/api/import-shopee-excel', async (req, res) => {
     const refundStatusCol = headers.refundStatus || 15;
     const sellCol = headers.sell || 28;
 
+    const rowsToProcess = [];
+
     worksheet.eachRow((row, rowNumber) => {
       if (rowNumber === 1) return;
 
@@ -439,12 +411,9 @@ app.post('/api/import-shopee-excel', async (req, res) => {
       let lowerRefund = rawRefund.toLowerCase();
       let status = 'Giao thành công';
 
-      // 1. CHECK RETURN/REFUND STATUS COLUMN FIRST (Col 15)
       if (lowerRefund.includes('chấp thuận') || lowerRefund.includes('thành công') || lowerRefund.includes('chấp nhận') || lowerRefund.includes('đồng ý') || lowerRefund.includes('approved')) {
         status = 'Trả hàng/Hoàn tiền';
-      } 
-      // 2. CHECK MAIN ORDER STATUS (Col 4)
-      else if (lowerStatus.includes('đã nhận được hàng') || lowerStatus.includes('hoàn thành') || lowerStatus.includes('đã giao') || lowerStatus.includes('completed')) {
+      } else if (lowerStatus.includes('đã nhận được hàng') || lowerStatus.includes('hoàn thành') || lowerStatus.includes('đã giao') || lowerStatus.includes('completed')) {
         status = 'Giao thành công';
       } else if (lowerStatus.includes('hủy') || lowerStatus.includes('cancelled')) {
         status = 'Đã hủy';
@@ -459,10 +428,10 @@ app.post('/api/import-shopee-excel', async (req, res) => {
       const sellVnd = Number(row.getCell(sellCol).value) || 0;
       const shopVoucherVnd = headers.shopVoucher ? Number(row.getCell(headers.shopVoucher).value) || 0 : 0;
 
-      const existingIdx = data.orders.findIndex(o => o.id === rawId);
-      if (existingIdx >= 0) {
-        const old = data.orders[existingIdx];
-        data.orders[existingIdx] = {
+      const old = existingMap.get(rawId);
+      if (old) {
+        updatedCount++;
+        rowsToProcess.push({
           ...old,
           date: dateStr,
           status,
@@ -477,10 +446,10 @@ app.post('/api/import-shopee-excel', async (req, res) => {
           buyer: buyer || old.buyer,
           sku: sku || old.sku,
           variation: variation || old.variation || ''
-        };
-        updatedCount++;
+        });
       } else {
-        const newOrder = {
+        newCount++;
+        rowsToProcess.push({
           id: rawId,
           date: dateStr,
           buyer,
@@ -499,20 +468,21 @@ app.post('/api/import-shopee-excel', async (req, res) => {
           serviceFee: headers.serviceFee ? Number(row.getCell(headers.serviceFee).value) || undefined : undefined,
           paymentFee: headers.paymentFee ? Number(row.getCell(headers.paymentFee).value) || undefined : undefined,
           note: 'Import từ File Shopee Excel'
-        };
-        data.orders.unshift(newOrder);
-        newCount++;
+        });
       }
     });
 
-    writeData(data);
+    for (const o of rowsToProcess) {
+      await dbModule.upsertOrder(o);
+    }
+
     res.json({
       success: true,
       newCount,
       updatedCount,
       message: updatedCount > 0
-        ? `Đã nạp & cập nhật thành công ${updatedCount + newCount} đơn hàng từ File Excel!`
-        : `Đã nạp mới thành công ${newCount} đơn hàng từ File Excel!`
+        ? `Đã nạp & cập nhật thành công ${updatedCount + newCount} đơn hàng vào SQLite Database!`
+        : `Đã nạp mới thành công ${newCount} đơn hàng vào SQLite Database!`
     });
   } catch (err) {
     console.error('Error importing Shopee excel:', err);
@@ -521,92 +491,100 @@ app.post('/api/import-shopee-excel', async (req, res) => {
 });
 
 // 6. SHOPEE API CONFIGURATION
-app.get('/api/shopee/config', (req, res) => {
-  const data = readData();
-  res.json(data.apiConfig || {});
+app.get('/api/shopee/config', async (req, res) => {
+  try {
+    const config = await dbModule.getApiConfig();
+    res.json(config);
+  } catch (err) {
+    res.status(500).json({ error: 'Database error fetching API config' });
+  }
 });
 
-app.post('/api/shopee/config', (req, res) => {
+app.post('/api/shopee/config', async (req, res) => {
   const { partnerId, partnerKey, shopId } = req.body;
-  const data = readData();
-
-  data.apiConfig = {
+  const config = {
     partnerId: partnerId || '',
     partnerKey: partnerKey || '',
     shopId: shopId || '',
     isAuthorized: Boolean(partnerId && partnerKey && shopId),
-    lastSyncTime: data.apiConfig?.lastSyncTime || new Date().toISOString()
+    lastSyncTime: new Date().toISOString()
   };
 
-  writeData(data);
-  res.json({ success: true, config: data.apiConfig });
+  try {
+    await dbModule.upsertApiConfig(config);
+    res.json({ success: true, config });
+  } catch (err) {
+    res.status(500).json({ error: 'Database error saving API config' });
+  }
 });
 
-app.post('/api/shopee/sync', (req, res) => {
-  const data = readData();
-  const isMock = !data.apiConfig.partnerKey;
-  const today = new Date().toISOString().split('T')[0];
+app.post('/api/shopee/sync', async (req, res) => {
+  try {
+    const config = await dbModule.getApiConfig();
+    const isMock = !config.partnerKey;
+    const today = new Date().toISOString().split('T')[0];
 
-  const mockSkus = [
-    { name: 'Tai nghe Bluetooth Pro X Wireless', priceCny: 35.0, sell: 220000 },
-    { name: 'Ốp lưng iPhone 15 Silicone Chống Sốc', priceCny: 6.5, sell: 55000 },
-    { name: 'Cáp sạc nhanh 100W Type-C Dây Dù', priceCny: 12.0, sell: 99000 },
-    { name: 'Đồng hồ thông minh Fit 3 Đo Nhịp Tim', priceCny: 120.0, sell: 690000 }
-  ];
+    const mockSkus = [
+      { name: 'Tai nghe Bluetooth Pro X Wireless', priceCny: 35.0, sell: 220000 },
+      { name: 'Ốp lưng iPhone 15 Silicone Chống Sốc', priceCny: 6.5, sell: 55000 },
+      { name: 'Cáp sạc nhanh 100W Type-C Dây Dù', priceCny: 12.0, sell: 99000 },
+      { name: 'Đồng hồ thông minh Fit 3 Đo Nhịp Tim', priceCny: 120.0, sell: 690000 }
+    ];
 
-  const randItem = mockSkus[Math.floor(Math.random() * mockSkus.length)];
-  const randNum = Math.floor(1000 + Math.random() * 9000);
-  const newOrder = {
-    id: `2608${randNum}SHOPEE`,
-    date: today,
-    buyer: `shopee_user_${randNum}`,
-    sku: randItem.name,
-    variation: 'Màu Mặc Định',
-    qty: Math.floor(1 + Math.random() * 3),
-    status: 'Giao thành công',
-    priceCny: randItem.priceCny,
-    rateDate: today,
-    weightKg: 1.0,
-    pricePerKgVnd: 24000,
-    shipVnd: 24000,
-    sellVnd: randItem.sell,
-    shopVoucherVnd: 10000,
-    note: 'Tự động đồng bộ từ Shopee API'
-  };
+    const randItem = mockSkus[Math.floor(Math.random() * mockSkus.length)];
+    const randNum = Math.floor(1000 + Math.random() * 9000);
+    const newOrder = {
+      id: `2608${randNum}SHOPEE`,
+      date: today,
+      buyer: `shopee_user_${randNum}`,
+      sku: randItem.name,
+      variation: 'Màu Mặc Định',
+      qty: Math.floor(1 + Math.random() * 3),
+      status: 'Giao thành công',
+      priceCny: randItem.priceCny,
+      rateDate: today,
+      weightKg: 1.0,
+      pricePerKgVnd: 24000,
+      shipVnd: 24000,
+      sellVnd: randItem.sell,
+      shopVoucherVnd: 10000,
+      note: 'Tự động đồng bộ từ Shopee API'
+    };
 
-  if (!data.orders.some(o => o.id === newOrder.id)) {
-    data.orders.unshift(newOrder);
+    await dbModule.upsertOrder(newOrder);
+
+    const randAds = Math.floor(100000 + Math.random() * 80000);
+    await dbModule.upsertDailyAds(today, randAds);
+
+    config.lastSyncTime = new Date().toISOString();
+    await dbModule.upsertApiConfig(config);
+
+    res.json({
+      success: true,
+      isMock,
+      message: isMock ? 'Đã tự động đồng bộ đơn hàng & Chi phí QC Shopee Ads hàng ngày thành công!' : 'Đã kết nối Shopee API V2 và đồng bộ Đơn Hàng + Phí QC Ads thành công!',
+      syncedOrder: newOrder,
+      dailyAdsToday: randAds,
+      lastSyncTime: config.lastSyncTime
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Database error during API sync' });
   }
-
-  if (!data.dailyAds[today]) {
-    data.dailyAds[today] = Math.floor(100000 + Math.random() * 80000);
-  }
-
-  data.apiConfig.lastSyncTime = new Date().toISOString();
-  writeData(data);
-
-  res.json({
-    success: true,
-    isMock,
-    message: isMock ? 'Đã tự động đồng bộ đơn hàng & Chi phí QC Shopee Ads hàng ngày thành công!' : 'Đã kết nối Shopee API V2 và đồng bộ Đơn Hàng + Phí QC Ads thành công!',
-    syncedOrder: newOrder,
-    dailyAdsToday: data.dailyAds[today],
-    lastSyncTime: data.apiConfig.lastSyncTime
-  });
 });
 
 // 7. EXPORT EXCEL WORKBOOK (.xlsx) WITH VARIATION COLUMN
 app.get('/api/export', async (req, res) => {
   try {
     const monthKey = req.query.month || '2026-08';
-    const data = readData();
+    const allOrders = await dbModule.getAllOrders();
+    const rates = await dbModule.getAllRates();
 
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'Shopee Profit Tracker Web App';
     workbook.created = new Date();
 
-    const monthOrders = data.orders.filter(o => o.date && o.date.startsWith(monthKey));
-    const calculated = monthOrders.map(o => calculateOrderDetails(o, data.rates));
+    const monthOrders = allOrders.filter(o => o.date && o.date.startsWith(monthKey));
+    const calculated = monthOrders.map(o => calculateOrderDetails(o, rates));
 
     const ws = workbook.addWorksheet(`Thang_${monthKey.replace('-', '_')}`);
     ws.columns = [
@@ -664,9 +642,13 @@ app.get('/api/export', async (req, res) => {
   }
 });
 
-// Start Server
-app.listen(PORT, () => {
-  console.log(`====================================================`);
-  console.log(`🚀 Shopee Profit Web App is running at: http://localhost:${PORT}`);
-  console.log(`====================================================`);
+// START SERVER AFTER DATABASE INITIALIZATION
+dbModule.initDb().then(() => {
+  app.listen(PORT, () => {
+    console.log(`====================================================`);
+    console.log(`🚀 Shopee Profit Web App (SQLite Database Engine) is running at: http://localhost:${PORT}`);
+    console.log(`====================================================`);
+  });
+}).catch(err => {
+  console.error('Failed to initialize SQLite database:', err);
 });
