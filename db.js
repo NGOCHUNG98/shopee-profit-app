@@ -1,261 +1,181 @@
-const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
 const fs = require('fs');
+const path = require('path');
 
 const DATA_DIR = path.join(__dirname, 'data');
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
-const DB_PATH = path.join(DATA_DIR, 'database.sqlite');
-const db = new sqlite3.Database(DB_PATH);
+const DB_PATH = path.join(DATA_DIR, 'database.json');
 
-function initDb() {
-  return new Promise((resolve, reject) => {
-    db.serialize(() => {
-      db.run(`
-        CREATE TABLE IF NOT EXISTS orders (
-          id TEXT PRIMARY KEY,
-          date TEXT,
-          buyer TEXT,
-          sku TEXT,
-          variation TEXT,
-          qty INTEGER,
-          status TEXT,
-          priceCny REAL,
-          rateDate TEXT,
-          weightKg REAL,
-          pricePerKgVnd REAL,
-          shipVnd REAL,
-          sellVnd REAL,
-          shopVoucherVnd REAL,
-          fixedFee REAL,
-          serviceFee REAL,
-          paymentFee REAL,
-          note TEXT
-        )
-      `);
+let inMemoryDb = {
+  orders: [],
+  rates: [],
+  daily_ads: {},
+  ads_costs: {},
+  api_config: {}
+};
 
-      db.run(`
-        CREATE TABLE IF NOT EXISTS rates (
-          date TEXT PRIMARY KEY,
-          baseRate REAL,
-          feePercent REAL,
-          source TEXT
-        )
-      `);
-
-      db.run(`
-        CREATE TABLE IF NOT EXISTS daily_ads (
-          date TEXT PRIMARY KEY,
-          adsCost REAL
-        )
-      `);
-
-      db.run(`
-        CREATE TABLE IF NOT EXISTS ads_costs (
-          monthKey TEXT PRIMARY KEY,
-          adsCost REAL
-        )
-      `);
-
-      db.run(`
-        CREATE TABLE IF NOT EXISTS api_config (
-          id INTEGER PRIMARY KEY DEFAULT 1,
-          partnerId TEXT,
-          partnerKey TEXT,
-          shopId TEXT,
-          isAuthorized INTEGER,
-          lastSyncTime TEXT
-        )
-      `, (err) => {
-        if (err) return reject(err);
-        migrateFromJson().then(resolve).catch(reject);
-      });
-    });
-  });
-}
-
-// Auto-migrate store.json to SQLite DB on first run
-async function migrateFromJson() {
-  const jsonPath = path.join(DATA_DIR, 'store.json');
-  if (!fs.existsSync(jsonPath)) return;
-
+function saveDbAtomic() {
   try {
-    const data = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
-    if (data.orders && data.orders.length > 0) {
-      const count = await getOrdersCount();
-      if (count === 0) {
-        console.log(`📦 Migrating ${data.orders.length} orders from store.json to SQLite Database...`);
-        for (const o of data.orders) {
-          await upsertOrder(o);
-        }
-        console.log('✅ SQLite Database migration completed!');
-      }
-    }
+    const tempPath = `${DB_PATH}.tmp`;
+    fs.writeFileSync(tempPath, JSON.stringify(inMemoryDb, null, 2), 'utf8');
+    fs.renameSync(tempPath, DB_PATH);
   } catch (err) {
-    console.error('Error migrating json data:', err);
+    console.error('Error saving atomic database:', err);
   }
 }
 
-function getOrdersCount() {
-  return new Promise((resolve, reject) => {
-    db.get('SELECT COUNT(*) as cnt FROM orders', (err, row) => {
-      if (err) return reject(err);
-      resolve(row ? row.cnt : 0);
-    });
-  });
+function loadDb() {
+  try {
+    if (fs.existsSync(DB_PATH)) {
+      const raw = fs.readFileSync(DB_PATH, 'utf8');
+      const parsed = JSON.parse(raw);
+      inMemoryDb = {
+        orders: parsed.orders || [],
+        rates: parsed.rates || [],
+        daily_ads: parsed.daily_ads || {},
+        ads_costs: parsed.ads_costs || {},
+        api_config: parsed.api_config || {}
+      };
+    } else {
+      migrateLegacyFiles();
+      saveDbAtomic();
+    }
+  } catch (err) {
+    console.error('Error loading database:', err);
+  }
 }
 
-function getAllOrders() {
-  return new Promise((resolve, reject) => {
-    db.all('SELECT * FROM orders ORDER BY date DESC', (err, rows) => {
-      if (err) return reject(err);
-      resolve(rows || []);
-    });
-  });
+function migrateLegacyFiles() {
+  const storePath = path.join(DATA_DIR, 'store.json');
+  if (fs.existsSync(storePath)) {
+    try {
+      const storeData = JSON.parse(fs.readFileSync(storePath, 'utf8'));
+      inMemoryDb.orders = storeData.orders || [];
+      inMemoryDb.rates = storeData.rates || [];
+      inMemoryDb.daily_ads = storeData.dailyAds || {};
+      inMemoryDb.ads_costs = storeData.adsCosts || {};
+      inMemoryDb.api_config = storeData.apiConfig || {};
+      console.log(`📦 Successfully migrated ${inMemoryDb.orders.length} orders to Atomic Pure JS Database!`);
+    } catch (e) {
+      console.error('Legacy migration error:', e);
+    }
+  }
 }
 
-function upsertOrder(o) {
-  return new Promise((resolve, reject) => {
-    const sql = `
-      INSERT OR REPLACE INTO orders (
-        id, date, buyer, sku, variation, qty, status, priceCny, rateDate,
-        weightKg, pricePerKgVnd, shipVnd, sellVnd, shopVoucherVnd, fixedFee, serviceFee, paymentFee, note
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-    db.run(sql, [
-      o.id,
-      o.date,
-      o.buyer || 'shopee_user',
-      o.sku || 'Sản phẩm Shopee',
-      o.variation || '',
-      Number(o.qty) || 1,
-      o.status || 'Giao thành công',
-      Number(o.priceCny) || 0,
-      o.rateDate || o.date,
-      Number(o.weightKg) || 5.0,
-      Number(o.pricePerKgVnd) || 24000,
-      Number(o.shipVnd) || 0,
-      Number(o.sellVnd) || 0,
-      Number(o.shopVoucherVnd) || 0,
-      o.fixedFee !== undefined && o.fixedFee !== null ? Number(o.fixedFee) : null,
-      o.serviceFee !== undefined && o.serviceFee !== null ? Number(o.serviceFee) : null,
-      o.paymentFee !== undefined && o.paymentFee !== null ? Number(o.paymentFee) : null,
-      o.note || ''
-    ], function(err) {
-      if (err) return reject(err);
-      resolve(this);
-    });
-  });
+async function initDb() {
+  loadDb();
+  return true;
 }
 
-function deleteOrder(id) {
-  return new Promise((resolve, reject) => {
-    db.run('DELETE FROM orders WHERE id = ?', [id], function(err) {
-      if (err) return reject(err);
-      resolve(this);
-    });
-  });
+async function getAllOrders() {
+  return [...inMemoryDb.orders].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 }
 
-function clearAllOrders() {
-  return new Promise((resolve, reject) => {
-    db.run('DELETE FROM orders', function(err) {
-      if (err) return reject(err);
-      resolve(this);
-    });
-  });
+async function upsertOrder(o) {
+  const idx = inMemoryDb.orders.findIndex(item => item.id === o.id);
+  const formatted = {
+    id: o.id,
+    date: o.date,
+    buyer: o.buyer || 'shopee_user',
+    sku: o.sku || 'Sản phẩm Shopee',
+    variation: o.variation || '',
+    qty: Number(o.qty) || 1,
+    status: o.status || 'Giao thành công',
+    priceCny: Number(o.priceCny) || 0,
+    rateDate: o.rateDate || o.date,
+    weightKg: Number(o.weightKg) || 5.0,
+    pricePerKgVnd: Number(o.pricePerKgVnd) || 24000,
+    shipVnd: Number(o.shipVnd) || 0,
+    sellVnd: Number(o.sellVnd) || 0,
+    shopVoucherVnd: Number(o.shopVoucherVnd) || 0,
+    fixedFee: o.fixedFee !== undefined && o.fixedFee !== null ? Number(o.fixedFee) : undefined,
+    serviceFee: o.serviceFee !== undefined && o.serviceFee !== null ? Number(o.serviceFee) : undefined,
+    paymentFee: o.paymentFee !== undefined && o.paymentFee !== null ? Number(o.paymentFee) : undefined,
+    note: o.note || ''
+  };
+
+  if (idx >= 0) {
+    inMemoryDb.orders[idx] = { ...inMemoryDb.orders[idx], ...formatted };
+  } else {
+    inMemoryDb.orders.unshift(formatted);
+  }
+  saveDbAtomic();
+  return formatted;
 }
 
-function getAllRates() {
-  return new Promise((resolve, reject) => {
-    db.all('SELECT * FROM rates ORDER BY date DESC', (err, rows) => {
-      if (err) return reject(err);
-      resolve(rows || []);
-    });
-  });
+async function deleteOrder(id) {
+  inMemoryDb.orders = inMemoryDb.orders.filter(item => item.id !== id);
+  saveDbAtomic();
+  return true;
 }
 
-function upsertRate(r) {
-  return new Promise((resolve, reject) => {
-    const sql = 'INSERT OR REPLACE INTO rates (date, baseRate, feePercent, source) VALUES (?, ?, ?, ?)';
-    db.run(sql, [r.date, Number(r.baseRate) || 0, Number(r.feePercent) || 0, r.source || 'Tự nhập'], function(err) {
-      if (err) return reject(err);
-      resolve(this);
-    });
-  });
+async function clearAllOrders() {
+  inMemoryDb.orders = [];
+  saveDbAtomic();
+  return true;
 }
 
-function getAllDailyAds() {
-  return new Promise((resolve, reject) => {
-    db.all('SELECT * FROM daily_ads', (err, rows) => {
-      if (err) return reject(err);
-      const map = {};
-      (rows || []).forEach(r => map[r.date] = r.adsCost);
-      resolve(map);
-    });
-  });
+async function getAllRates() {
+  return [...inMemoryDb.rates].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 }
 
-function upsertDailyAds(date, adsCost) {
-  return new Promise((resolve, reject) => {
-    const sql = 'INSERT OR REPLACE INTO daily_ads (date, adsCost) VALUES (?, ?)';
-    db.run(sql, [date, Number(adsCost) || 0], function(err) {
-      if (err) return reject(err);
-      resolve(this);
-    });
-  });
+async function upsertRate(r) {
+  const idx = inMemoryDb.rates.findIndex(item => item.date === r.date);
+  const formatted = {
+    date: r.date,
+    baseRate: Number(r.baseRate) || 0,
+    feePercent: Number(r.feePercent) || 0,
+    source: r.source || 'Tự nhập'
+  };
+
+  if (idx >= 0) {
+    inMemoryDb.rates[idx] = formatted;
+  } else {
+    inMemoryDb.rates.push(formatted);
+  }
+  saveDbAtomic();
+  return formatted;
 }
 
-function getAllAdsCosts() {
-  return new Promise((resolve, reject) => {
-    db.all('SELECT * FROM ads_costs', (err, rows) => {
-      if (err) return reject(err);
-      const map = {};
-      (rows || []).forEach(r => map[r.monthKey] = r.adsCost);
-      resolve(map);
-    });
-  });
+async function getAllDailyAds() {
+  return { ...inMemoryDb.daily_ads };
 }
 
-function upsertAdsCost(monthKey, adsCost) {
-  return new Promise((resolve, reject) => {
-    const sql = 'INSERT OR REPLACE INTO ads_costs (monthKey, adsCost) VALUES (?, ?)';
-    db.run(sql, [monthKey, Number(adsCost) || 0], function(err) {
-      if (err) return reject(err);
-      resolve(this);
-    });
-  });
+async function upsertDailyAds(date, adsCost) {
+  inMemoryDb.daily_ads[date] = Number(adsCost) || 0;
+  saveDbAtomic();
+  return true;
 }
 
-function getApiConfig() {
-  return new Promise((resolve, reject) => {
-    db.get('SELECT * FROM api_config WHERE id = 1', (err, row) => {
-      if (err) return reject(err);
-      resolve(row ? {
-        partnerId: row.partnerId,
-        partnerKey: row.partnerKey,
-        shopId: row.shopId,
-        isAuthorized: Boolean(row.isAuthorized),
-        lastSyncTime: row.lastSyncTime
-      } : {});
-    });
-  });
+async function getAllAdsCosts() {
+  return { ...inMemoryDb.ads_costs };
 }
 
-function upsertApiConfig(config) {
-  return new Promise((resolve, reject) => {
-    const sql = 'INSERT OR REPLACE INTO api_config (id, partnerId, partnerKey, shopId, isAuthorized, lastSyncTime) VALUES (1, ?, ?, ?, ?, ?)';
-    db.run(sql, [config.partnerId || '', config.partnerKey || '', config.shopId || '', config.isAuthorized ? 1 : 0, config.lastSyncTime || ''], function(err) {
-      if (err) return reject(err);
-      resolve(this);
-    });
-  });
+async function upsertAdsCost(monthKey, adsCost) {
+  inMemoryDb.ads_costs[monthKey] = Number(adsCost) || 0;
+  saveDbAtomic();
+  return true;
+}
+
+async function getApiConfig() {
+  return { ...inMemoryDb.api_config };
+}
+
+async function upsertApiConfig(config) {
+  inMemoryDb.api_config = {
+    partnerId: config.partnerId || '',
+    partnerKey: config.partnerKey || '',
+    shopId: config.shopId || '',
+    isAuthorized: Boolean(config.isAuthorized),
+    lastSyncTime: config.lastSyncTime || new Date().toISOString()
+  };
+  saveDbAtomic();
+  return inMemoryDb.api_config;
 }
 
 module.exports = {
-  db,
   initDb,
   getAllOrders,
   upsertOrder,
