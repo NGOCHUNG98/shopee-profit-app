@@ -12,12 +12,18 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-const DATA_FILE = path.join(__dirname, 'data', 'store.json');
+const DATA_DIR = path.join(__dirname, 'data');
+const DATA_FILE = path.join(DATA_DIR, 'store.json');
 
 function readData() {
   try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
     if (!fs.existsSync(DATA_FILE)) {
-      return { apiConfig: {}, adsCosts: {}, dailyAds: {}, rates: [], orders: [] };
+      const defaultData = { apiConfig: {}, adsCosts: {}, dailyAds: {}, rates: [], orders: [] };
+      fs.writeFileSync(DATA_FILE, JSON.stringify(defaultData, null, 2), 'utf8');
+      return defaultData;
     }
     const raw = fs.readFileSync(DATA_FILE, 'utf8');
     const parsed = JSON.parse(raw);
@@ -36,6 +42,9 @@ function readData() {
 
 function writeData(data) {
   try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
     fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf8');
   } catch (err) {
     console.error('Error writing data file:', err);
