@@ -173,7 +173,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // --------------------------------------------------
-  // ORDERS LOADING & MANAGEMENT WITH LIVE STATUS COUNTS
+  // ORDERS LOADING & MANAGEMENT WITH LIVE STATUS COUNTS AND INLINE EDITING
   // --------------------------------------------------
   async function loadOrders() {
     try {
@@ -198,7 +198,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       ordersTableBody.innerHTML = '';
       if (orders.length === 0) {
-        ordersTableBody.innerHTML = `<tr><td colspan="18" class="text-center text-muted">Không tìm thấy đơn hàng nào</td></tr>`;
+        ordersTableBody.innerHTML = `<tr><td colspan="19" class="text-center text-muted">Không tìm thấy đơn hàng nào</td></tr>`;
         return;
       }
 
@@ -219,7 +219,8 @@ document.addEventListener('DOMContentLoaded', () => {
           <td class="font-medium text-muted">${o.variation || '-'}</td>
           <td class="text-center font-bold">${o.qty}</td>
           <td class="text-center">${statusBadge}</td>
-          <td class="text-right">¥${formatNumber(o.priceCny)}</td>
+          <td class="text-right font-bold editable-cell inline-edit-cny" data-id="${o.id}" data-val="${o.priceCny}" title="Click để sửa nhanh Giá Vốn NDT">¥${formatNumber(o.priceCny)} ✏️</td>
+          <td class="text-right font-bold editable-cell inline-edit-weight" data-id="${o.id}" data-val="${o.weightKg || 1.0}" title="Click để sửa nhanh Trọng Lượng Kg">${o.weightKg || 1.0} kg ✏️</td>
           <td class="text-right text-muted">${formatVnd(o.effectiveRate)}</td>
           <td class="text-right font-bold text-orange">${formatVnd(o.totalCostVnd)}</td>
           <td class="text-right">${formatVnd(o.sellVnd * o.qty)}</td>
@@ -234,6 +235,129 @@ document.addEventListener('DOMContentLoaded', () => {
           </td>
         `;
         ordersTableBody.appendChild(tr);
+      });
+
+      // ATTACH INLINE EDIT LISTENERS FOR CNY PRICE AND WEIGHT KG
+      document.querySelectorAll('.inline-edit-cny').forEach(cell => {
+        cell.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (cell.querySelector('input')) return;
+
+          const orderId = cell.dataset.id;
+          const currentVal = cell.dataset.val;
+
+          const input = document.createElement('input');
+          input.type = 'number';
+          input.step = 'any';
+          input.className = 'inline-input';
+          input.value = currentVal;
+
+          cell.innerHTML = '';
+          cell.appendChild(input);
+          input.focus();
+          input.select();
+
+          let isSaved = false;
+          async function saveInlineCny() {
+            if (isSaved) return;
+            isSaved = true;
+            const newVal = Number(input.value);
+            if (!isNaN(newVal) && newVal >= 0) {
+              try {
+                const targetOrder = orders.find(x => x.id === orderId);
+                if (targetOrder) {
+                  await fetch(`/api/orders/${orderId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ...targetOrder, priceCny: newVal })
+                  });
+                  loadOrders();
+                  loadDashboard();
+                }
+              } catch (err) {
+                console.error('Error saving inline CNY price:', err);
+              }
+            } else {
+              loadOrders();
+            }
+          }
+
+          input.addEventListener('keydown', (evt) => {
+            if (evt.key === 'Enter') {
+              evt.preventDefault();
+              saveInlineCny();
+            } else if (evt.key === 'Escape') {
+              isSaved = true;
+              loadOrders();
+            }
+          });
+
+          input.addEventListener('blur', () => {
+            saveInlineCny();
+          });
+        });
+      });
+
+      document.querySelectorAll('.inline-edit-weight').forEach(cell => {
+        cell.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (cell.querySelector('input')) return;
+
+          const orderId = cell.dataset.id;
+          const currentVal = cell.dataset.val;
+
+          const input = document.createElement('input');
+          input.type = 'number';
+          input.step = 'any';
+          input.className = 'inline-input';
+          input.value = currentVal;
+
+          cell.innerHTML = '';
+          cell.appendChild(input);
+          input.focus();
+          input.select();
+
+          let isSaved = false;
+          async function saveInlineWeight() {
+            if (isSaved) return;
+            isSaved = true;
+            const newVal = Number(input.value);
+            if (!isNaN(newVal) && newVal >= 0) {
+              try {
+                const targetOrder = orders.find(x => x.id === orderId);
+                if (targetOrder) {
+                  const pricePerKg = targetOrder.pricePerKgVnd || 24000;
+                  const newShipVnd = Math.round(newVal * pricePerKg);
+                  await fetch(`/api/orders/${orderId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ...targetOrder, weightKg: newVal, shipVnd: newShipVnd })
+                  });
+                  loadOrders();
+                  loadDashboard();
+                }
+              } catch (err) {
+                console.error('Error saving inline weight:', err);
+              }
+            } else {
+              loadOrders();
+            }
+          }
+
+          input.addEventListener('keydown', (evt) => {
+            if (evt.key === 'Enter') {
+              evt.preventDefault();
+              saveInlineWeight();
+            } else if (evt.key === 'Escape') {
+              isSaved = true;
+              loadOrders();
+            }
+          });
+
+          input.addEventListener('blur', () => {
+            saveInlineWeight();
+          });
+        });
       });
 
       document.querySelectorAll('.btn-edit-order').forEach(btn => {

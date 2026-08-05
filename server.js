@@ -89,7 +89,7 @@ function calculateOrderDetails(order, rates) {
 }
 
 // ----------------------------------------------------
-// REST API ENDPOINTS (SQLITE DATABASE POWERED)
+// REST API ENDPOINTS (PURE JS DATABASE POWERED)
 // ----------------------------------------------------
 
 // 1. GET Dashboard Metrics
@@ -202,7 +202,7 @@ app.post('/api/daily-ads', async (req, res) => {
   }
 });
 
-// 3. Daily Rates Endpoints (WITH DATE RANGE SUPPORT)
+// 3. Daily Rates Endpoints
 app.get('/api/rates', async (req, res) => {
   try {
     const monthKey = req.query.month;
@@ -335,7 +335,7 @@ app.delete('/api/orders/:id', async (req, res) => {
   }
 });
 
-// 5. IMPORT OFFICIAL SHOPEE EXPORT EXCEL FILE (.xlsx) INTO SQLITE DATABASE
+// 5. IMPORT OFFICIAL SHOPEE EXPORT EXCEL FILE (.xlsx) INTO DATABASE
 app.post('/api/import-shopee-excel', async (req, res) => {
   try {
     const { base64Data, clearAll } = req.body;
@@ -499,8 +499,8 @@ app.post('/api/import-shopee-excel', async (req, res) => {
       newCount,
       updatedCount,
       message: updatedCount > 0
-        ? `Đã nạp & cập nhật thành công ${updatedCount + newCount} đơn hàng vào SQLite Database!`
-        : `Đã nạp mới thành công ${newCount} đơn hàng vào SQLite Database!`
+        ? `Đã nạp & cập nhật thành công ${updatedCount + newCount} đơn hàng vào Database!`
+        : `Đã nạp mới thành công ${newCount} đơn hàng vào Database!`
     });
   } catch (err) {
     console.error('Error importing Shopee excel:', err);
@@ -590,7 +590,7 @@ app.post('/api/shopee/sync', async (req, res) => {
   }
 });
 
-// 7. EXPORT EXCEL WORKBOOK (.xlsx) WITH VARIATION COLUMN
+// 7. EXPORT EXCEL WORKBOOK (.xlsx) WITH VARIATION COLUMN AND WEIGHT COLUMN NEXT TO CNY PRICE
 app.get('/api/export', async (req, res) => {
   try {
     const monthKey = req.query.month || '2026-08';
@@ -615,8 +615,8 @@ app.get('/api/export', async (req, res) => {
       { header: 'Số Lượng', key: 'qty', width: 10 },
       { header: 'Trạng Thái', key: 'status', width: 18 },
       { header: 'Giá NDT (¥)', key: 'priceCny', width: 14 },
+      { header: 'Trọng Lượng (kg)', key: 'weightKg', width: 14 },
       { header: 'Tỷ Giá NDT', key: 'rate', width: 14 },
-      { header: 'Cân Nặng (kg)', key: 'weightKg', width: 14 },
       { header: 'Cước VC/kg (VND)', key: 'pricePerKg', width: 16 },
       { header: 'Tổng Giá Vốn (VND)', key: 'cost', width: 20 },
       { header: 'Giá Bán Shopee (VND)', key: 'sell', width: 20 },
@@ -637,8 +637,8 @@ app.get('/api/export', async (req, res) => {
         qty: o.qty,
         status: o.status,
         priceCny: o.priceCny,
+        weightKg: o.weightKg || 1.0,
         rate: o.effectiveRate,
-        weightKg: o.weightKg,
         pricePerKg: o.pricePerKgVnd,
         cost: o.totalCostVnd,
         sell: o.sellVnd * o.qty,
@@ -664,9 +664,9 @@ app.get('/api/export', async (req, res) => {
 dbModule.initDb().then(() => {
   app.listen(PORT, () => {
     console.log(`====================================================`);
-    console.log(`🚀 Shopee Profit Web App (SQLite Database Engine) is running at: http://localhost:${PORT}`);
+    console.log(`🚀 Shopee Profit Web App (Pure JS Engine) is running at: http://localhost:${PORT}`);
     console.log(`====================================================`);
   });
 }).catch(err => {
-  console.error('Failed to initialize SQLite database:', err);
+  console.error('Failed to initialize database:', err);
 });
