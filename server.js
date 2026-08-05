@@ -104,13 +104,23 @@ app.get('/api/dashboard', async (req, res) => {
     const monthOrders = allOrders.filter(o => o.date && o.date.startsWith(monthKey));
     const calculatedOrders = monthOrders.map(o => calculateOrderDetails(o, rates));
 
+    // FILTER ORDERS BY STATUS
     const completedOrders = calculatedOrders.filter(o => o.status === 'Giao thành công');
+    const refundedOrders = calculatedOrders.filter(o => o.status === 'Trả hàng/Hoàn tiền');
+
     const totalOrdersCount = calculatedOrders.length;
-    const totalItemsSold = calculatedOrders.reduce((sum, o) => sum + (Number(o.qty) || 0), 0);
-    const totalRevenue = calculatedOrders.reduce((sum, o) => sum + o.netRevenue, 0);
-    const totalCost = calculatedOrders.reduce((sum, o) => sum + (o.status === 'Giao thành công' || o.status === 'Chờ giao hàng' || o.status === 'Đang vận chuyển' ? o.totalCostVnd : 0), 0);
-    const totalShopeeFees = calculatedOrders.reduce((sum, o) => sum + o.totalShopeeFees, 0);
-    const orderProfit = calculatedOrders.reduce((sum, o) => sum + o.netProfit, 0);
+    const completedCount = completedOrders.length;
+    const totalItemsSold = completedOrders.reduce((sum, o) => sum + (Number(o.qty) || 0), 0);
+
+    // TOP KPI CARDS: ONLY COMPLETED ORDERS FOR REVENUE, COST, FEES
+    const totalRevenue = completedOrders.reduce((sum, o) => sum + o.totalOrderValue, 0);
+    const totalCost = completedOrders.reduce((sum, o) => sum + o.totalCostVnd, 0);
+    const totalShopeeFees = completedOrders.reduce((sum, o) => sum + o.totalShopeeFees, 0);
+
+    // NET PROFIT = COMPLETED ORDER PROFIT + REFUND LOSSES (-2700 PER RETURNED ORDER)
+    const completedProfit = completedOrders.reduce((sum, o) => sum + o.netProfit, 0);
+    const refundedLoss = refundedOrders.reduce((sum, o) => sum + o.netProfit, 0);
+    const orderProfit = completedProfit + refundedLoss;
 
     const [yearStr, mStr] = monthKey.split('-');
     const year = Number(yearStr) || 2026;
@@ -119,9 +129,13 @@ app.get('/api/dashboard', async (req, res) => {
 
     let sumDailyAds = 0;
     const dailyStats = [];
+
     for (let day = 1; day <= daysInMonth; day++) {
       const dayStr = `${monthKey}-${day.toString().padStart(2, '0')}`;
       const dayOrders = calculatedOrders.filter(o => o.date === dayStr);
+
+      const dayCompleted = dayOrders.filter(o => o.status === 'Giao thành công');
+      const dayRefunded = dayOrders.filter(o => o.status === 'Trả hàng/Hoàn tiền');
 
       const dayRateObj = rates.find(r => r.date === dayStr);
       const dayRate = dayRateObj ? Math.round(dayRateObj.baseRate * (1 + (dayRateObj.feePercent || 0) / 100)) : 0;
@@ -129,13 +143,19 @@ app.get('/api/dashboard', async (req, res) => {
       const dayAds = Number(dailyAdsMap[dayStr]) || 0;
       sumDailyAds += dayAds;
 
-      const dayRevenue = dayOrders.reduce((sum, o) => sum + o.totalOrderValue, 0);
-      const dayCost = dayOrders.reduce((sum, o) => sum + (o.status === 'Giao thành công' || o.status === 'Chờ giao hàng' || o.status === 'Đang vận chuyển' ? o.totalCostVnd : 0), 0);
-      const dayFees = dayOrders.reduce((sum, o) => sum + o.totalShopeeFees, 0);
-      const dayOrderProfit = dayOrders.reduce((sum, o) => sum + o.netProfit, 0);
+      // DAILY TABLE ROW: STATS COUNT ONLY COMPLETED ORDERS
+      const dayCount = dayCompleted.length;
+      const dayQty = dayCompleted.reduce((sum, o) => sum + (Number(o.qty) || 0), 0);
+      const dayRevenue = dayCompleted.reduce((sum, o) => sum + o.totalOrderValue, 0);
+      const dayCost = dayCompleted.reduce((sum, o) => sum + o.totalCostVnd, 0);
+      const dayFees = dayCompleted.reduce((sum, o) => sum + o.totalShopeeFees, 0);
+
+      // DAILY PROFIT = COMPLETED PROFIT - REFUND DEDUCTIONS (-2700/đơn)
+      const dayCompletedProfit = dayCompleted.reduce((sum, o) => sum + o.netProfit, 0);
+      const dayRefundedLoss = dayRefunded.reduce((sum, o) => sum + o.netProfit, 0);
+      const dayOrderProfit = dayCompletedProfit + dayRefundedLoss;
+
       const dayFinalProfit = dayOrderProfit - dayAds;
-      const dayCount = dayOrders.length;
-      const dayQty = dayOrders.reduce((sum, o) => sum + (Number(o.qty) || 0), 0);
 
       dailyStats.push({
         date: dayStr,
@@ -160,7 +180,7 @@ app.get('/api/dashboard', async (req, res) => {
     res.json({
       monthKey,
       totalOrdersCount,
-      completedCount: completedOrders.length,
+      completedCount,
       totalItemsSold,
       totalRevenue,
       totalCost,
