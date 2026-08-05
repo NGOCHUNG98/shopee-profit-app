@@ -202,7 +202,7 @@ app.post('/api/daily-ads', async (req, res) => {
   }
 });
 
-// 3. Daily Rates Endpoints
+// 3. Daily Rates Endpoints (WITH DATE RANGE SUPPORT)
 app.get('/api/rates', async (req, res) => {
   try {
     const monthKey = req.query.month;
@@ -218,22 +218,40 @@ app.get('/api/rates', async (req, res) => {
 });
 
 app.post('/api/rates', async (req, res) => {
-  const { date, baseRate, feePercent, source } = req.body;
-  if (!date || baseRate === undefined) {
-    return res.status(400).json({ error: 'Missing required date or baseRate' });
+  const { date, startDate, endDate, baseRate, feePercent, source } = req.body;
+  const start = startDate || date;
+  const end = endDate || start;
+
+  if (!start || baseRate === undefined) {
+    return res.status(400).json({ error: 'Missing required start date or baseRate' });
   }
 
-  const newRate = {
-    date,
-    baseRate: Number(baseRate) || 0,
-    feePercent: Number(feePercent) || 0,
-    source: source || 'Tự nhập'
-  };
-
   try {
-    await dbModule.upsertRate(newRate);
-    res.json({ success: true, rate: newRate });
+    const curDate = new Date(start);
+    const stopDate = new Date(end);
+    let count = 0;
+
+    while (curDate <= stopDate) {
+      const dateStr = curDate.toISOString().split('T')[0];
+      await dbModule.upsertRate({
+        date: dateStr,
+        baseRate: Number(baseRate) || 0,
+        feePercent: Number(feePercent) || 0,
+        source: source || 'Tự nhập'
+      });
+      count++;
+      curDate.setDate(curDate.getDate() + 1);
+    }
+
+    res.json({
+      success: true,
+      count,
+      message: count > 1
+        ? `Đã lưu thành công tỷ giá ${baseRate} VND cho ${count} ngày (từ ${start} đến ${end})!`
+        : `Đã lưu thành công tỷ giá ${baseRate} VND cho ngày ${start}!`
+    });
   } catch (err) {
+    console.error('Error saving rate range:', err);
     res.status(500).json({ error: 'Database error saving rate' });
   }
 });

@@ -1,63 +1,40 @@
+// SHOPEE PROFIT TRACKER WEB APP - CLIENT JS ENGINE
 document.addEventListener('DOMContentLoaded', () => {
-  // APP STATE
+
+  // STATE MANAGEMENT
   let currentMonth = '2026-08';
   let currentStatusFilter = 'all';
   let currentSearchQuery = '';
-  let editingOrderId = null;
 
   // DOM ELEMENTS
   const monthSelect = document.getElementById('monthSelect');
   const navTabs = document.querySelectorAll('.nav-tab');
   const tabPanels = document.querySelectorAll('.tab-panel');
 
-  const btnSyncShopee = document.getElementById('btnSyncShopee');
-  const btnExportExcel = document.getElementById('btnExportExcel');
-  const btnImportShopeeExcel = document.getElementById('btnImportShopeeExcel');
-  const shopeeFileInput = document.getElementById('shopeeFileInput');
-
-  const btnSaveAds = document.getElementById('btnSaveAds');
-  const adsCostInput = document.getElementById('adsCostInput');
-
-  // KPI Elements
   const kpiOrdersCount = document.getElementById('kpiOrdersCount');
   const kpiItemsSold = document.getElementById('kpiItemsSold');
   const kpiRevenue = document.getElementById('kpiRevenue');
   const kpiCost = document.getElementById('kpiCost');
   const kpiFees = document.getElementById('kpiFees');
+  const adsCostInput = document.getElementById('adsCostInput');
+  const btnSaveAds = document.getElementById('btnSaveAds');
   const kpiFinalProfit = document.getElementById('kpiFinalProfit');
   const kpiMargin = document.getElementById('kpiMargin');
   const monthTitleBadge = document.getElementById('monthTitleBadge');
   const dailyStatsBody = document.getElementById('dailyStatsBody');
 
-  // Orders Elements
   const tabOrderCount = document.getElementById('tabOrderCount');
-  const orderSearchInput = document.getElementById('orderSearchInput');
   const filterPills = document.querySelectorAll('.pill');
+  const orderSearchInput = document.getElementById('orderSearchInput');
   const ordersTableBody = document.getElementById('ordersTableBody');
   const btnOpenAddOrderModal = document.getElementById('btnOpenAddOrderModal');
 
-  // Modals
   const orderModal = document.getElementById('orderModal');
+  const orderModalTitle = document.getElementById('orderModalTitle');
   const btnCloseOrderModal = document.getElementById('btnCloseOrderModal');
   const btnCancelOrderModal = document.getElementById('btnCancelOrderModal');
   const orderForm = document.getElementById('orderForm');
-  const orderModalTitle = document.getElementById('orderModalTitle');
 
-  // Freight calculation elements
-  const orderWeightKg = document.getElementById('orderWeightKg');
-  const orderPricePerKgVnd = document.getElementById('orderPricePerKgVnd');
-  const orderShipVnd = document.getElementById('orderShipVnd');
-
-  function updateFreightTotal() {
-    const kg = Number(orderWeightKg.value) || 0;
-    const ratePerKg = Number(orderPricePerKgVnd.value) || 0;
-    orderShipVnd.value = Math.round(kg * ratePerKg);
-  }
-
-  orderWeightKg.addEventListener('input', updateFreightTotal);
-  orderPricePerKgVnd.addEventListener('input', updateFreightTotal);
-
-  // Rates Elements
   const ratesTableBody = document.getElementById('ratesTableBody');
   const btnOpenAddRateModal = document.getElementById('btnOpenAddRateModal');
   const rateModal = document.getElementById('rateModal');
@@ -65,43 +42,30 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnCancelRateModal = document.getElementById('btnCancelRateModal');
   const rateForm = document.getElementById('rateForm');
 
-  // API Config Elements
+  const shopeeFileInput = document.getElementById('shopeeFileInput');
+  const btnImportShopeeExcel = document.getElementById('btnImportShopeeExcel');
+  const btnSyncShopee = document.getElementById('btnSyncShopee');
+  const btnExportExcel = document.getElementById('btnExportExcel');
+
   const apiConfigForm = document.getElementById('apiConfigForm');
   const apiStatusBadge = document.getElementById('apiStatusBadge');
 
-  // --------------------------------------------------
-  // FORMATTING HELPERS
-  // --------------------------------------------------
+  let isEditingOrder = false;
+  let editingOrderId = null;
+
+  // FORMATTERS
   function formatVnd(val) {
     if (val === undefined || val === null || isNaN(val)) return '0 đ';
-    return new Intl.NumberFormat('vi-VN').format(Math.round(val)) + ' đ';
+    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val);
   }
 
-  function formatCny(val) {
-    if (val === undefined || val === null || isNaN(val)) return '¥0.00';
-    return '¥' + Number(val).toFixed(2);
+  function formatNumber(val) {
+    if (val === undefined || val === null || isNaN(val)) return '0';
+    return new Intl.NumberFormat('vi-VN').format(val);
   }
 
-  function getStatusBadge(status) {
-    switch (status) {
-      case 'Giao thành công':
-        return `<span class="badge badge-success">🟢 Giao thành công</span>`;
-      case 'Chờ giao hàng':
-        return `<span class="badge badge-info" style="background:#E0F2FE; color:#0369A1;">🔵 Chờ giao hàng</span>`;
-      case 'Đang vận chuyển':
-        return `<span class="badge badge-info">🚚 Đang vận chuyển</span>`;
-      case 'Đã hủy':
-        return `<span class="badge badge-danger">🔴 Đã hủy</span>`;
-      case 'Trả hàng/Hoàn tiền':
-        return `<span class="badge badge-warning">🟡 Trả hàng/Hoàn tiền</span>`;
-      default:
-        return `<span class="badge badge-info">${status}</span>`;
-    }
-  }
-
-  // --------------------------------------------------
-  // INITIALIZATION & EVENT LISTENERS
-  // --------------------------------------------------
+  // EVENT: MONTH SELECT
+  monthSelect.value = currentMonth;
   monthSelect.addEventListener('change', (e) => {
     currentMonth = e.target.value;
     loadDashboard();
@@ -109,6 +73,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadRates();
   });
 
+  // EVENT: NAVIGATION TABS
   navTabs.forEach(tab => {
     tab.addEventListener('click', () => {
       navTabs.forEach(t => t.classList.remove('active'));
@@ -118,111 +83,15 @@ document.addEventListener('DOMContentLoaded', () => {
       const targetId = `tab-${tab.dataset.tab}`;
       document.getElementById(targetId).classList.add('active');
 
+      if (tab.dataset.tab === 'dashboard') loadDashboard();
       if (tab.dataset.tab === 'orders') loadOrders();
       if (tab.dataset.tab === 'rates') loadRates();
       if (tab.dataset.tab === 'apiconfig') loadApiConfig();
     });
   });
 
-  filterPills.forEach(pill => {
-    pill.addEventListener('click', () => {
-      filterPills.forEach(p => p.classList.remove('active'));
-      pill.classList.add('active');
-      currentStatusFilter = pill.dataset.status;
-      loadOrders();
-    });
-  });
-
-  orderSearchInput.addEventListener('input', (e) => {
-    currentSearchQuery = e.target.value.trim();
-    loadOrders();
-  });
-
-  btnExportExcel.addEventListener('click', () => {
-    window.location.href = `/api/export?month=${currentMonth}`;
-  });
-
   // --------------------------------------------------
-  // IMPORT SHOPEE EXPORT EXCEL FILE (.xlsx) WITH SEAMLESS STATUS UPDATE
-  // --------------------------------------------------
-  btnImportShopeeExcel.addEventListener('click', () => {
-    shopeeFileInput.click();
-  });
-
-  shopeeFileInput.addEventListener('change', async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    btnImportShopeeExcel.disabled = true;
-    btnImportShopeeExcel.innerHTML = '⏳ Đang nạp file...';
-
-    try {
-      const reader = new FileReader();
-      reader.onload = async (evt) => {
-        const base64Data = evt.target.result.split(',')[1];
-        const res = await fetch('/api/import-shopee-excel', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ base64Data, clearAll: false })
-        });
-        const result = await res.json();
-
-        if (result.success) {
-          alert(result.message);
-          loadDashboard();
-          loadOrders();
-        } else {
-          alert('Lỗi: ' + (result.error || 'Không đọc được file'));
-        }
-        btnImportShopeeExcel.disabled = false;
-        btnImportShopeeExcel.innerHTML = '📤 Import Shopee Excel';
-        shopeeFileInput.value = '';
-      };
-      reader.readAsDataURL(file);
-    } catch (err) {
-      alert('Lỗi khi nạp file Shopee Excel');
-      btnImportShopeeExcel.disabled = false;
-      btnImportShopeeExcel.innerHTML = '📤 Import Shopee Excel';
-      shopeeFileInput.value = '';
-    }
-  });
-
-  // Shopee API Sync
-  btnSyncShopee.addEventListener('click', async () => {
-    btnSyncShopee.disabled = true;
-    btnSyncShopee.innerHTML = '🔄 Đang đồng bộ...';
-
-    try {
-      const res = await fetch('/api/shopee/sync', { method: 'POST' });
-      const result = await res.json();
-      alert(result.message);
-      loadDashboard();
-      loadOrders();
-    } catch (err) {
-      alert('Lỗi kết nối khi đồng bộ API Shopee');
-    } finally {
-      btnSyncShopee.disabled = false;
-      btnSyncShopee.innerHTML = '🔄 Đồng Bộ Shopee API';
-    }
-  });
-
-  btnSaveAds.addEventListener('click', async () => {
-    const cost = Number(adsCostInput.value) || 0;
-    try {
-      await fetch('/api/ads-cost', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ monthKey: currentMonth, adsCost: cost })
-      });
-      alert('Đã lưu Chi phí Quảng Cáo Shopee Ads Tháng!');
-      loadDashboard();
-    } catch (err) {
-      alert('Lỗi khi lưu chi phí QC');
-    }
-  });
-
-  // --------------------------------------------------
-  // DASHBOARD LOADING & RENDERING
+  // DASHBOARD LOADING
   // --------------------------------------------------
   async function loadDashboard() {
     try {
@@ -234,7 +103,7 @@ document.addEventListener('DOMContentLoaded', () => {
       kpiRevenue.textContent = formatVnd(data.totalRevenue);
       kpiCost.textContent = formatVnd(data.totalCost);
       kpiFees.textContent = formatVnd(data.totalShopeeFees);
-      adsCostInput.value = data.adsCost;
+      adsCostInput.value = data.adsCost || 0;
       kpiFinalProfit.textContent = formatVnd(data.finalNetProfit);
       kpiMargin.textContent = `${data.profitMargin}%`;
 
@@ -288,6 +157,21 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  btnSaveAds.addEventListener('click', async () => {
+    const cost = Number(adsCostInput.value) || 0;
+    try {
+      await fetch('/api/ads-cost', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ monthKey: currentMonth, adsCost: cost })
+      });
+      alert('Đã lưu Chi phí Quảng Cáo Shopee Ads Tháng!');
+      loadDashboard();
+    } catch (err) {
+      alert('Lỗi khi lưu chi phí QC');
+    }
+  });
+
   // --------------------------------------------------
   // ORDERS LOADING & MANAGEMENT WITH LIVE STATUS COUNTS
   // --------------------------------------------------
@@ -298,45 +182,50 @@ document.addEventListener('DOMContentLoaded', () => {
       const resData = await res.json();
 
       const orders = Array.isArray(resData) ? resData : (resData.orders || []);
-      const counts = resData.statusCounts || {};
+      const counts = resData.statusCounts || { all: orders.length, completed: 0, pending: 0, shipping: 0, cancelled: 0, refunded: 0 };
 
-      // UPDATE STATUS FILTER BADGE COUNTS
+      tabOrderCount.textContent = counts.all;
+
       filterPills.forEach(pill => {
-        const st = pill.dataset.status;
-        if (st === 'all') pill.textContent = `Tất cả (${counts.all || orders.length})`;
-        else if (st === 'Giao thành công') pill.textContent = `🟢 Giao thành công (${counts.completed || 0})`;
-        else if (st === 'Chờ giao hàng') pill.textContent = `🔵 Chờ giao hàng (${counts.pending || 0})`;
-        else if (st === 'Đang vận chuyển') pill.textContent = `🚚 Đang vận chuyển (${counts.shipping || 0})`;
-        else if (st === 'Đã hủy') pill.textContent = `🔴 Đã hủy (${counts.cancelled || 0})`;
-        else if (st === 'Trả hàng/Hoàn tiền') pill.textContent = `🟡 Trả hàng/Hoàn tiền (${counts.refunded || 0})`;
+        const statusKey = pill.dataset.status;
+        if (statusKey === 'all') pill.textContent = `Tất cả (${counts.all})`;
+        if (statusKey === 'Giao thành công') pill.textContent = `🟢 Giao thành công (${counts.completed})`;
+        if (statusKey === 'Chờ giao hàng') pill.textContent = `🔵 Chờ giao hàng (${counts.pending})`;
+        if (statusKey === 'Đang vận chuyển') pill.textContent = `🚚 Đang vận chuyển (${counts.shipping})`;
+        if (statusKey === 'Đã hủy') pill.textContent = `🔴 Đã hủy (${counts.cancelled})`;
+        if (statusKey === 'Trả hàng/Hoàn tiền') pill.textContent = `🟡 Trả hàng/Hoàn tiền (${counts.refunded})`;
       });
 
-      tabOrderCount.textContent = counts.all !== undefined ? counts.all : orders.length;
       ordersTableBody.innerHTML = '';
-
       if (orders.length === 0) {
         ordersTableBody.innerHTML = `<tr><td colspan="18" class="text-center text-muted">Không tìm thấy đơn hàng nào</td></tr>`;
         return;
       }
 
-      orders.forEach((o, idx) => {
+      orders.forEach((o, index) => {
+        let statusBadge = `<span class="badge badge-success">🟢 Giao thành công</span>`;
+        if (o.status === 'Chờ giao hàng') statusBadge = `<span class="badge badge-info">🔵 Chờ giao hàng</span>`;
+        if (o.status === 'Đang vận chuyển') statusBadge = `<span class="badge badge-warning">🚚 Đang vận chuyển</span>`;
+        if (o.status === 'Đã hủy') statusBadge = `<span class="badge badge-danger">🔴 Đã hủy</span>`;
+        if (o.status === 'Trả hàng/Hoàn tiền') statusBadge = `<span class="badge badge-warning">🟡 Trả hàng/Hoàn tiền</span>`;
+
         const tr = document.createElement('tr');
         tr.innerHTML = `
-          <td class="text-center">${idx + 1}</td>
-          <td class="text-center font-bold">${o.id}</td>
+          <td class="text-center">${index + 1}</td>
+          <td class="text-center font-bold text-primary">${o.id}</td>
           <td class="text-center">${o.date}</td>
-          <td class="font-bold">${o.buyer}</td>
-          <td>${o.sku}</td>
-          <td style="color: #94A3B8; font-size: 0.82rem;">${o.variation || '-'}</td>
+          <td>${o.buyer}</td>
+          <td class="font-medium">${o.sku}</td>
+          <td class="font-medium text-muted">${o.variation || '-'}</td>
           <td class="text-center font-bold">${o.qty}</td>
-          <td class="text-center">${getStatusBadge(o.status)}</td>
-          <td class="text-right">${formatCny(o.priceCny)}</td>
-          <td class="text-right font-bold">${formatVnd(o.effectiveRate)}</td>
-          <td class="text-right font-bold">${formatVnd(o.totalCostVnd)}</td>
+          <td class="text-center">${statusBadge}</td>
+          <td class="text-right">¥${formatNumber(o.priceCny)}</td>
+          <td class="text-right text-muted">${formatVnd(o.effectiveRate)}</td>
+          <td class="text-right font-bold text-orange">${formatVnd(o.totalCostVnd)}</td>
           <td class="text-right">${formatVnd(o.sellVnd * o.qty)}</td>
-          <td class="text-right text-danger">${formatVnd(o.shopVoucherVnd || 0)}</td>
-          <td class="text-right text-warning">${formatVnd(o.taxFee || 0)}</td>
-          <td class="text-right">${formatVnd(o.totalShopeeFees)}</td>
+          <td class="text-right text-danger">${o.shopVoucherVnd ? formatVnd(o.shopVoucherVnd) : '-'}</td>
+          <td class="text-right text-warning">${formatVnd(o.taxFee)}</td>
+          <td class="text-right text-purple">${formatVnd(o.totalShopeeFees)}</td>
           <td class="text-right font-bold">${formatVnd(o.netRevenue)}</td>
           <td class="text-right font-bold ${o.netProfit >= 0 ? 'text-success' : 'text-danger'}">${formatVnd(o.netProfit)}</td>
           <td class="text-center">
@@ -347,29 +236,57 @@ document.addEventListener('DOMContentLoaded', () => {
         ordersTableBody.appendChild(tr);
       });
 
-      document.querySelectorAll('.btn-edit-order').forEach(b => {
-        b.addEventListener('click', () => openEditOrderModal(b.dataset.id));
+      document.querySelectorAll('.btn-edit-order').forEach(btn => {
+        btn.addEventListener('click', () => openEditOrderModal(btn.dataset.id, orders));
       });
-      document.querySelectorAll('.btn-delete-order').forEach(b => {
-        b.addEventListener('click', () => deleteOrder(b.dataset.id));
+      document.querySelectorAll('.btn-delete-order').forEach(btn => {
+        btn.addEventListener('click', () => deleteOrder(btn.dataset.id));
       });
     } catch (err) {
       console.error('Error loading orders:', err);
     }
   }
 
+  filterPills.forEach(p => {
+    p.addEventListener('click', () => {
+      filterPills.forEach(x => x.classList.remove('active'));
+      p.classList.add('active');
+      currentStatusFilter = p.dataset.status;
+      loadOrders();
+    });
+  });
+
+  orderSearchInput.addEventListener('input', (e) => {
+    currentSearchQuery = e.target.value;
+    loadOrders();
+  });
+
+  // AUTO CALCULATE SHIP COST IN MODAL BASED ON WEIGHT & RATE PER KG
+  const orderWeightInput = document.getElementById('orderWeightKg');
+  const orderPricePerKgInput = document.getElementById('orderPricePerKgVnd');
+  const orderShipInput = document.getElementById('orderShipVnd');
+
+  function updateModalShipCost() {
+    const w = Number(orderWeightInput.value) || 0;
+    const p = Number(orderPricePerKgInput.value) || 24000;
+    orderShipInput.value = Math.round(w * p);
+  }
+
+  orderWeightInput.addEventListener('input', updateModalShipCost);
+  orderPricePerKgInput.addEventListener('input', updateModalShipCost);
+
+  // ORDER MODAL HANDLERS
   btnOpenAddOrderModal.addEventListener('click', () => {
+    isEditingOrder = false;
     editingOrderId = null;
     orderModalTitle.textContent = 'Thêm Đơn Hàng Shopee Mới';
-    orderForm.reset();
     document.getElementById('orderId').readOnly = false;
-    document.getElementById('orderDate').value = `${currentMonth}-01`;
-    document.getElementById('orderRateDate').value = `${currentMonth}-01`;
-    document.getElementById('orderShopVoucherVnd').value = 0;
-    document.getElementById('orderVariation').value = '';
-    orderWeightKg.value = 1.0;
-    orderPricePerKgVnd.value = 24000;
-    updateFreightTotal();
+    orderForm.reset();
+    document.getElementById('orderDate').value = new Date().toISOString().split('T')[0];
+    document.getElementById('orderRateDate').value = new Date().toISOString().split('T')[0];
+    document.getElementById('orderWeightKg').value = '1.0';
+    document.getElementById('orderPricePerKgVnd').value = '24000';
+    updateModalShipCost();
     orderModal.classList.add('active');
   });
 
@@ -379,39 +296,32 @@ document.addEventListener('DOMContentLoaded', () => {
   btnCloseOrderModal.addEventListener('click', closeOrderModal);
   btnCancelOrderModal.addEventListener('click', closeOrderModal);
 
-  async function openEditOrderModal(id) {
-    try {
-      const res = await fetch(`/api/orders?month=${currentMonth}&status=all&search=${id}`);
-      const resData = await res.json();
-      const orders = Array.isArray(resData) ? resData : (resData.orders || []);
-      const order = orders.find(o => o.id === id);
-      if (!order) return;
+  function openEditOrderModal(orderId, orders) {
+    const o = orders.find(x => x.id === orderId);
+    if (!o) return;
 
-      editingOrderId = id;
-      orderModalTitle.textContent = `Chỉnh Sửa Đơn Hàng ${id}`;
-      document.getElementById('orderId').value = order.id;
-      document.getElementById('orderId').readOnly = true;
-      document.getElementById('orderDate').value = order.date;
-      document.getElementById('orderBuyer').value = order.buyer;
-      document.getElementById('orderSku').value = order.sku;
-      document.getElementById('orderVariation').value = order.variation || '';
-      document.getElementById('orderQty').value = order.qty;
-      document.getElementById('orderStatus').value = order.status;
-      document.getElementById('orderPriceCny').value = order.priceCny;
-      document.getElementById('orderRateDate').value = order.rateDate || order.date;
-      
-      orderWeightKg.value = order.weightKg !== undefined ? order.weightKg : 5.0;
-      orderPricePerKgVnd.value = order.pricePerKgVnd !== undefined ? order.pricePerKgVnd : 24000;
-      updateFreightTotal();
+    isEditingOrder = true;
+    editingOrderId = orderId;
+    orderModalTitle.textContent = `Chỉnh Sửa Đơn Hàng: ${orderId}`;
 
-      document.getElementById('orderSellVnd').value = order.sellVnd;
-      document.getElementById('orderShopVoucherVnd').value = order.shopVoucherVnd || 0;
-      document.getElementById('orderNote').value = order.note || '';
+    document.getElementById('orderId').value = o.id;
+    document.getElementById('orderId').readOnly = true;
+    document.getElementById('orderDate').value = o.date;
+    document.getElementById('orderBuyer').value = o.buyer;
+    document.getElementById('orderSku').value = o.sku;
+    document.getElementById('orderVariation').value = o.variation || '';
+    document.getElementById('orderQty').value = o.qty;
+    document.getElementById('orderStatus').value = o.status;
+    document.getElementById('orderPriceCny').value = o.priceCny;
+    document.getElementById('orderRateDate').value = o.rateDate || o.date;
+    document.getElementById('orderWeightKg').value = o.weightKg || 1.0;
+    document.getElementById('orderPricePerKgVnd').value = o.pricePerKgVnd || 24000;
+    document.getElementById('orderShipVnd').value = o.shipVnd || Math.round((o.weightKg || 1.0) * (o.pricePerKgVnd || 24000));
+    document.getElementById('orderSellVnd').value = o.sellVnd;
+    document.getElementById('orderShopVoucherVnd').value = o.shopVoucherVnd || 0;
+    document.getElementById('orderNote').value = o.note || '';
 
-      orderModal.classList.add('active');
-    } catch (err) {
-      alert('Lỗi tải thông tin đơn hàng');
-    }
+    orderModal.classList.add('active');
   }
 
   orderForm.addEventListener('submit', async (e) => {
@@ -423,33 +333,37 @@ document.addEventListener('DOMContentLoaded', () => {
       buyer: document.getElementById('orderBuyer').value.trim(),
       sku: document.getElementById('orderSku').value.trim(),
       variation: document.getElementById('orderVariation').value.trim(),
-      qty: Number(document.getElementById('orderQty').value) || 1,
+      qty: Number(document.getElementById('orderQty').value),
       status: document.getElementById('orderStatus').value,
-      priceCny: Number(document.getElementById('orderPriceCny').value) || 0,
+      priceCny: Number(document.getElementById('orderPriceCny').value),
       rateDate: document.getElementById('orderRateDate').value,
-      weightKg: Number(orderWeightKg.value) || 0,
-      pricePerKgVnd: Number(orderPricePerKgVnd.value) || 0,
-      shipVnd: Number(orderShipVnd.value) || 0,
-      sellVnd: Number(document.getElementById('orderSellVnd').value) || 0,
+      weightKg: Number(document.getElementById('orderWeightKg').value),
+      pricePerKgVnd: Number(document.getElementById('orderPricePerKgVnd').value) || 24000,
+      shipVnd: Number(document.getElementById('orderShipVnd').value),
+      sellVnd: Number(document.getElementById('orderSellVnd').value),
       shopVoucherVnd: Number(document.getElementById('orderShopVoucherVnd').value) || 0,
       note: document.getElementById('orderNote').value.trim()
     };
 
     try {
-      const method = editingOrderId ? 'PUT' : 'POST';
-      const url = editingOrderId ? `/api/orders/${editingOrderId}` : '/api/orders';
+      const url = isEditingOrder ? `/api/orders/${editingOrderId}` : '/api/orders';
+      const method = isEditingOrder ? 'PUT' : 'POST';
 
-      await fetch(url, {
+      const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(orderData)
       });
 
-      closeOrderModal();
-      loadDashboard();
-      loadOrders();
+      if (res.ok) {
+        closeOrderModal();
+        loadOrders();
+        loadDashboard();
+      } else {
+        alert('Lỗi khi lưu đơn hàng');
+      }
     } catch (err) {
-      alert('Lỗi khi lưu đơn hàng');
+      alert('Không thể kết nối đến máy chủ');
     }
   });
 
@@ -457,15 +371,85 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!confirm(`Bạn có chắc chắn muốn xóa đơn hàng ${id}?`)) return;
     try {
       await fetch(`/api/orders/${id}`, { method: 'DELETE' });
-      loadDashboard();
       loadOrders();
+      loadDashboard();
     } catch (err) {
       alert('Lỗi khi xóa đơn hàng');
     }
   }
 
   // --------------------------------------------------
-  // NDT RATES MANAGEMENT
+  // IMPORT SHOPEE EXCEL & SYNC & EXPORT
+  // --------------------------------------------------
+  btnImportShopeeExcel.addEventListener('click', () => {
+    shopeeFileInput.click();
+  });
+
+  shopeeFileInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      const base64Data = evt.target.result.split(',')[1];
+      const clearAll = confirm('Bạn có muốn XÓA TẤT CẢ đơn hàng hiện tại trước khi import file mới không?\n- Chọn OK để Xóa Hết & Import Mới.\n- Chọn Cancel để Nạp Nối Tiếp/Cập Nhật.');
+
+      try {
+        btnImportShopeeExcel.disabled = true;
+        btnImportShopeeExcel.textContent = '⏳ Đang Xử Lý Excel...';
+
+        const res = await fetch('/api/import-shopee-excel', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ base64Data, clearAll })
+        });
+        const result = await res.json();
+
+        if (result.success) {
+          alert(result.message);
+          loadDashboard();
+          loadOrders();
+        } else {
+          alert(`Lỗi import: ${result.error}`);
+        }
+      } catch (err) {
+        alert('Không thể đọc file Excel Shopee');
+      } finally {
+        btnImportShopeeExcel.disabled = false;
+        btnImportShopeeExcel.textContent = '📤 Import Shopee Excel';
+        shopeeFileInput.value = '';
+      }
+    };
+    reader.readAsDataURL(file);
+  });
+
+  btnSyncShopee.addEventListener('click', async () => {
+    try {
+      btnSyncShopee.disabled = true;
+      btnSyncShopee.innerHTML = '<span class="spin-icon">🔄</span> Đang Đồng Bộ API...';
+
+      const res = await fetch('/api/shopee/sync', { method: 'POST' });
+      const result = await res.json();
+
+      if (result.success) {
+        alert(`${result.message}\nĐã nạp đơn mới ID: ${result.syncedOrder.id}`);
+        loadDashboard();
+        loadOrders();
+      }
+    } catch (err) {
+      alert('Lỗi đồng bộ Shopee API');
+    } finally {
+      btnSyncShopee.disabled = false;
+      btnSyncShopee.innerHTML = '<span class="spin-icon">🔄</span> Đồng Bộ Shopee API';
+    }
+  });
+
+  btnExportExcel.addEventListener('click', () => {
+    window.location.href = `/api/export?month=${currentMonth}`;
+  });
+
+  // --------------------------------------------------
+  // RATES MANAGEMENT WITH DATE RANGE SUPPORT
   // --------------------------------------------------
   async function loadRates() {
     try {
@@ -473,19 +457,19 @@ document.addEventListener('DOMContentLoaded', () => {
       const rates = await res.json();
 
       ratesTableBody.innerHTML = '';
-      if (rates.length === 0) {
-        ratesTableBody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">Chưa có tỷ giá nào do bạn tự nhập trong tháng này</td></tr>`;
+      if (!rates || rates.length === 0) {
+        ratesTableBody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">Chưa có tỷ giá NDT tự nhập cho tháng này</td></tr>`;
         return;
       }
 
       rates.forEach(r => {
-        const effective = Math.round(r.baseRate * (1 + (r.feePercent || 0) / 100));
+        const effectiveRate = Math.round(r.baseRate * (1 + (r.feePercent || 0) / 100));
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td class="text-center font-bold">${r.date}</td>
-          <td class="text-right font-bold">${formatVnd(r.baseRate)}</td>
-          <td class="text-center">${r.feePercent || 0}%</td>
-          <td class="text-right font-bold text-success">${formatVnd(effective)}</td>
+          <td class="text-right">${formatVnd(r.baseRate)}</td>
+          <td class="text-center text-warning font-bold">${r.feePercent || 0}%</td>
+          <td class="text-right font-bold text-success">${formatVnd(effectiveRate)}</td>
           <td>${r.source || 'Tự nhập'}</td>
           <td class="text-center">
             <button class="btn btn-sm btn-secondary btn-edit-rate" data-date="${r.date}" data-base="${r.baseRate}" data-fee="${r.feePercent || 0}" data-source="${r.source || ''}">Sửa</button>
@@ -496,7 +480,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
       document.querySelectorAll('.btn-edit-rate').forEach(b => {
         b.addEventListener('click', () => {
-          document.getElementById('rateDateInput').value = b.dataset.date;
+          document.getElementById('rateStartDateInput').value = b.dataset.date;
+          document.getElementById('rateEndDateInput').value = b.dataset.date;
           document.getElementById('rateBaseInput').value = b.dataset.base;
           document.getElementById('rateFeeInput').value = b.dataset.fee;
           document.getElementById('rateSourceInput').value = b.dataset.source;
@@ -510,7 +495,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
   btnOpenAddRateModal.addEventListener('click', () => {
     rateForm.reset();
-    document.getElementById('rateDateInput').value = `${currentMonth}-01`;
+    const startDate = `${currentMonth}-01`;
+    const [yearStr, mStr] = currentMonth.split('-');
+    const daysInMonth = new Date(Number(yearStr), Number(mStr), 0).getDate();
+    const endDate = `${currentMonth}-${daysInMonth.toString().padStart(2, '0')}`;
+
+    document.getElementById('rateStartDateInput').value = startDate;
+    document.getElementById('rateEndDateInput').value = endDate;
     rateModal.classList.add('active');
   });
 
@@ -523,19 +514,27 @@ document.addEventListener('DOMContentLoaded', () => {
   rateForm.addEventListener('submit', async (e) => {
     e.preventDefault();
 
+    const startDate = document.getElementById('rateStartDateInput').value;
+    const endDate = document.getElementById('rateEndDateInput').value || startDate;
+
     const rateData = {
-      date: document.getElementById('rateDateInput').value,
+      startDate,
+      endDate,
       baseRate: Number(document.getElementById('rateBaseInput').value) || 0,
       feePercent: Number(document.getElementById('rateFeeInput').value) || 0,
       source: document.getElementById('rateSourceInput').value.trim()
     };
 
     try {
-      await fetch('/api/rates', {
+      const res = await fetch('/api/rates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(rateData)
       });
+      const result = await res.json();
+      if (result.message) {
+        alert(result.message);
+      }
       closeRateModal();
       loadRates();
       loadDashboard();
